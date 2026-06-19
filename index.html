@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1f2421">
+<title>Gestion de Stock</title>
+<style>
+  :root{
+    --bg:#1f2421;            /* slate vert foncé (chrome) */
+    --paper:#f7f5f0;         /* fond papier chaud */
+    --card:#ffffff;
+    --ink:#26201a;           /* texte principal */
+    --muted:#7c7468;         /* texte secondaire */
+    --line:#e7e2d8;          /* séparateurs */
+    --in:#4f8a36;            /* RÉCEPTION = vert pistache (entrée) */
+    --in-soft:#e9f1de;
+    --in-deep:#3a6927;
+    --out:#c2622d;           /* PRODUCTION = terre cuite (sortie) */
+    --out-soft:#f7e7d9;
+    --out-deep:#9a4a1d;
+    --warn:#c0392b;
+    --gold:#caa64a;
+    --radius:16px;
+    --shadow:0 2px 10px rgba(31,36,33,.08);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+    background:var(--paper);color:var(--ink);
+    font-size:16px;line-height:1.35;
+    padding-bottom:84px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .tnum{font-variant-numeric:tabular-nums}
+
+  /* ---------- En-tête ---------- */
+  header{
+    position:sticky;top:0;z-index:30;
+    background:var(--bg);color:#f3efe7;
+    padding:14px 16px 12px;
+  }
+  .h-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .h-title{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.5px;font-size:18px}
+  .h-dot{width:11px;height:11px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 4px rgba(202,166,74,.18)}
+  .h-mode{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:4px 10px;border-radius:99px}
+  .h-mode.in{background:var(--in);color:#fff}
+  .h-mode.out{background:var(--out);color:#fff}
+  .h-mode.neutral{background:#3a423d;color:#cfc9bd}
+  .h-meta{display:flex;gap:16px;margin-top:10px;font-size:12.5px;color:#bcb6a8}
+  .h-meta b{color:#fff;font-weight:700}
+  .h-date{appearance:none;background:#2b322d;border:1px solid #3a423d;color:#fff;border-radius:10px;padding:6px 9px;font-size:13px;font-family:inherit}
+
+  /* ---------- Conteneur ---------- */
+  main{max-width:680px;margin:0 auto;padding:14px 14px 0}
+  .screen{display:none}
+  .screen.active{display:block;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .lead{font-size:13px;color:var(--muted);margin:2px 0 14px}
+  .daychip{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);
+    border-radius:99px;padding:6px 13px 6px 11px;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;box-shadow:var(--shadow)}
+  .daychip .cal{font-size:14px}
+  .daychip .lbl{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  .logrow{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:9px 10px 9px 13px;margin-bottom:8px}
+  .logrow .li{flex:1;min-width:0}
+  .logrow .li b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .logrow .li span{font-size:12px;color:var(--muted)}
+  .logrow .amt{font-weight:800;font-size:14px;white-space:nowrap}
+  .logrow .amt.in{color:var(--in-deep)}
+  .logrow .amt.out{color:var(--out-deep)}
+  .logrow .undo{border:1.5px solid var(--warn);background:#fff;color:var(--warn);border-radius:10px;
+    padding:9px 13px;font-size:13px;font-weight:800;cursor:pointer;flex:none;font-family:inherit;white-space:nowrap}
+  .logrow .undo:active{transform:scale(.94)}
+  .logrow .keepbtn{border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;
+    padding:9px 13px;font-size:13px;font-weight:800;cursor:pointer;flex:none;font-family:inherit}
+  .logrow.armed{border-color:var(--warn);background:#fdecea}
+  .logrow .li .tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+    color:var(--gold);background:#f7efd6;border-radius:6px;padding:1px 6px;margin-left:6px}
+  .section-title{font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:18px 2px 9px}
+
+  /* ---------- Grille de produits ---------- */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .pbtn{
+    position:relative;border:1.5px solid var(--line);background:var(--card);
+    border-radius:14px;padding:13px 12px 11px;text-align:left;cursor:pointer;
+    min-height:74px;display:flex;flex-direction:column;justify-content:space-between;
+    transition:transform .07s,border-color .12s,box-shadow .12s;font-family:inherit;
+  }
+  .pbtn:active{transform:scale(.97)}
+  .pbtn .pn{font-weight:700;font-size:14px;line-height:1.2;color:var(--ink)}
+  .pbtn .ps{font-size:12px;font-weight:700;margin-top:8px}
+  .pbtn .ps.ok{color:var(--in-deep)}
+  .pbtn .ps.low{color:var(--out-deep)}
+  .pbtn .ps.empty{color:var(--warn)}
+  .screen-in .pbtn:active{border-color:var(--in)}
+  .screen-out .pbtn:active{border-color:var(--out)}
+  .pbtn.add{align-items:center;justify-content:center;border-style:dashed;color:var(--muted);font-weight:700;font-size:14px;background:transparent}
+  .pbtn.add .plus{font-size:22px;line-height:1;margin-bottom:4px}
+
+  /* ---------- Bandeaux récap ---------- */
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+  .scard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 12px;box-shadow:var(--shadow)}
+  .scard .lbl{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+  .scard .val{font-size:21px;font-weight:800;margin-top:4px}
+  .scard .val small{font-size:12px;font-weight:700;color:var(--muted)}
+  .scard.acc-in{border-top:3px solid var(--in)}
+  .scard.acc-out{border-top:3px solid var(--out)}
+  .scard.acc-gold{border-top:3px solid var(--gold)}
+
+  /* ---------- Inventaire ---------- */
+  .search{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;font-size:15px;font-family:inherit;margin-bottom:12px;background:var(--card)}
+  .invrow{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:8px}
+  .invrow .nm{flex:1;min-width:0}
+  .invrow .nm b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .invrow .nm span{font-size:12px;color:var(--muted)}
+  .invrow .kg{font-weight:800;font-size:15px;text-align:right;white-space:nowrap}
+  .invrow .kg small{display:block;font-size:11px;font-weight:600;color:var(--muted)}
+  .bar{height:7px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:5px}
+  .bar>i{display:block;height:100%;background:var(--gold);border-radius:99px}
+
+  /* ---------- Rapport ---------- */
+  .rrow{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:11px 6px;border-bottom:1px solid var(--line);font-size:14px}
+  .rrow.head{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--line)}
+  .rrow .rin{color:var(--in-deep);font-weight:700;text-align:right}
+  .rrow .rout{color:var(--out-deep);font-weight:700;text-align:right}
+  .rrow .rnet{font-weight:800;text-align:right}
+  .rrow .rname{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ---------- Boutons ---------- */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:12px;
+    padding:13px 16px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;width:100%}
+  .btn:active{transform:scale(.98)}
+  .btn-in{background:var(--in);color:#fff}
+  .btn-out{background:var(--out);color:#fff}
+  .btn-dark{background:var(--bg);color:#fff}
+  .btn-ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+  .btn-danger{background:#fff;color:var(--warn);border:1.5px solid var(--warn)}
+  .btn-row{display:flex;gap:10px;margin-top:10px}
+
+  /* ---------- Overlay / modal ---------- */
+  .ov{position:fixed;inset:0;z-index:60;background:rgba(31,36,33,.55);display:none;align-items:flex-end;justify-content:center;padding:0}
+  .ov.show{display:flex;animation:fade .15s ease}
+  .sheet{background:var(--paper);width:100%;max-width:680px;border-radius:22px 22px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto;animation:slideup .22s ease}
+  @keyframes slideup{from{transform:translateY(40px)}to{transform:none}}
+  .sheet h3{margin:2px 0 2px;font-size:19px;font-weight:800}
+  .sheet .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+
+  .pills{display:flex;gap:9px;margin-bottom:8px}
+  .pill{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:13px;padding:15px 8px;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;text-align:center}
+  .pill.sel{border-color:var(--in);background:var(--in-soft);color:var(--in-deep)}
+  .screen-out-ctx .pill.sel{border-color:var(--out);background:var(--out-soft);color:var(--out-deep)}
+
+  .field{margin-top:14px}
+  .field label{display:block;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  .num{width:100%;padding:13px;border:1.5px solid var(--line);border-radius:12px;font-size:18px;font-weight:700;font-family:inherit;text-align:center;background:var(--card)}
+  .stepper{display:flex;align-items:center;gap:10px}
+  .stepper .num{flex:1}
+  .step-b{width:54px;height:54px;flex:none;border:1.5px solid var(--line);background:var(--card);border-radius:13px;font-size:26px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1}
+  .calc{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:13px 15px;font-size:14px}
+  .calc .big{font-size:24px;font-weight:800;margin-top:3px}
+  .calc .big.in{color:var(--in-deep)}
+  .calc .big.out{color:var(--out-deep)}
+  .calc .neg{color:var(--warn)}
+
+  .ed-field{margin-bottom:12px}
+  .ed-field label{display:block;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .ed-field input{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:11px;font-size:16px;font-family:inherit;background:var(--card)}
+
+  /* ---------- Liste admin ---------- */
+  .adrow{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+  .adrow .ai{flex:1;min-width:0}
+  .adrow .ai b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .adrow .ai span{font-size:12px;color:var(--muted)}
+  .icon-b{border:none;background:var(--paper);border-radius:10px;width:40px;height:40px;font-size:17px;cursor:pointer;flex:none}
+  .icon-b.del{color:var(--warn)}
+
+  .gate{text-align:center;padding:42px 20px}
+  .gate .lock{font-size:40px}
+
+  /* ---------- Notice ---------- */
+  .notice{background:var(--in-soft);border:1px solid #cfe0bc;color:var(--in-deep);border-radius:13px;padding:12px 14px;font-size:13.5px;margin-bottom:14px;display:flex;gap:9px;align-items:flex-start}
+  .notice.gold{background:#f7efd6;border-color:#e8d59a;color:#806118}
+  .notice b{font-weight:800}
+
+  .empty{text-align:center;color:var(--muted);padding:34px 16px;font-size:14px}
+
+  /* ---------- Toast ---------- */
+  #toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--bg);color:#fff;padding:12px 18px;border-radius:99px;font-size:14px;font-weight:600;
+    opacity:0;pointer-events:none;transition:.25s;z-index:80;max-width:90%;text-align:center}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ---------- Navigation ---------- */
+  nav{position:fixed;bottom:0;left:0;right:0;z-index:50;background:var(--card);border-top:1px solid var(--line);
+    display:flex;max-width:680px;margin:0 auto;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .nav-b{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:6px 2px;cursor:pointer;color:var(--muted);font-family:inherit}
+  .nav-b .ni{font-size:21px;line-height:1}
+  .nav-b .nl{font-size:10.5px;font-weight:700;letter-spacing:.2px}
+  .nav-b.on{color:var(--ink)}
+  .nav-b.on.in{color:var(--in)}
+  .nav-b.on.out{color:var(--out)}
+
+  /* ---------- Synchronisation ---------- */
+  .synccard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+  .syncstat{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:700;margin-bottom:4px}
+  .sdot{width:10px;height:10px;border-radius:50%;flex:none;background:#bbb}
+  .sdot.ok{background:var(--in)} .sdot.off{background:var(--muted)} .sdot.err{background:var(--warn)} .sdot.busy{background:var(--gold)}
+  .syncsub{font-size:12.5px;color:var(--muted);margin-bottom:12px}
+  .syncin{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:11px;font-size:13px;font-family:inherit;background:var(--paper);margin-bottom:9px;word-break:break-all}
+  .toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;font-size:14px;font-weight:700}
+  .sw{width:48px;height:28px;border-radius:99px;background:var(--line);position:relative;transition:.2s;flex:none;cursor:pointer}
+  .sw.on{background:var(--in)}
+  .sw i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .sw.on i{left:23px}
+</style>
+</head>
+<body class="screen-in">
+
+<header>
+  <div class="h-top">
+    <div class="h-title"><span class="h-dot"></span> STOK</div>
+    <span id="modeBadge" class="h-mode in">Réception</span>
+  </div>
+  <div class="h-meta">
+    <div>Date <input type="date" id="workDate" class="h-date"></div>
+    <div>Stock total <b id="hTotalKg">0 kg</b></div>
+    <div>Valeur <b id="hTotalVal">0 ₺</b></div>
+    <div id="hSync" style="cursor:pointer" onclick="App.go('adm')">Synchro <b id="hSyncState">hors-ligne</b></div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ RÉCEPTION ============ -->
+  <section id="scr-in" class="screen active screen-in">
+    <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayIn"></span></div>
+    <p class="lead">Sélectionnez un produit livré, puis le format du colis et la quantité reçue.</p>
+    <div class="summary">
+      <div class="scard acc-in"><div class="lbl">Entrées du jour</div><div class="val tnum" id="inKgDay">0<small> kg</small></div></div>
+      <div class="scard acc-in"><div class="lbl">Colis reçus</div><div class="val tnum" id="inPkgDay">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Produits touchés</div><div class="val tnum" id="inProdDay">0</div></div>
+    </div>
+    <div class="section-title">Produits</div>
+    <div class="grid" id="gridIn"></div>
+    <div class="section-title">Saisies de la journée</div>
+    <div id="logIn"></div>
+  </section>
+
+  <!-- ============ PRODUCTION ============ -->
+  <section id="scr-out" class="screen screen-out">
+    <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayOut"></span></div>
+    <p class="lead">Pointez les produits pris en production. Chaque unité (colis / pochette) déduit son poids du stock.</p>
+    <div class="summary">
+      <div class="scard acc-out"><div class="lbl">Sorties du jour</div><div class="val tnum" id="outKgDay">0<small> kg</small></div></div>
+      <div class="scard acc-out"><div class="lbl">Unités prélevées</div><div class="val tnum" id="outPkgDay">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Produits touchés</div><div class="val tnum" id="outProdDay">0</div></div>
+    </div>
+    <div class="section-title">Produits</div>
+    <div class="grid" id="gridOut"></div>
+    <div class="section-title">Saisies de la journée</div>
+    <div id="logOut"></div>
+  </section>
+
+  <!-- ============ INVENTAIRE ============ -->
+  <section id="scr-inv" class="screen">
+    <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayInv"></span></div>
+    <p class="lead">Quantités et valeurs en stock. La valeur utilise le prix d'achat au kilo.</p>
+    <div class="summary">
+      <div class="scard acc-gold"><div class="lbl">Stock total</div><div class="val tnum" id="invTotalKg">0<small> kg</small></div></div>
+      <div class="scard acc-gold"><div class="lbl">Valeur totale</div><div class="val tnum" id="invTotalVal">0<small> ₺</small></div></div>
+      <div class="scard acc-out"><div class="lbl">Ruptures</div><div class="val tnum" id="invEmpty">0</div></div>
+    </div>
+    <div class="section-title">Détail par produit</div>
+    <input class="search" id="invSearch" placeholder="Rechercher un produit…" oninput="App.renderInv()">
+    <div id="invList"></div>
+  </section>
+
+  <!-- ============ RAPPORT ============ -->
+  <section id="scr-rep" class="screen">
+    <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayRep"></span></div>
+    <div id="repNotice"></div>
+    <p class="lead">Variation du stock pour une journée — uniquement les produits ayant eu un mouvement.</p>
+    <div class="field" style="margin-top:0">
+      <label>Journée du rapport</label>
+      <input type="date" id="repDate" class="num" style="text-align:left" onchange="App.renderRep()">
+    </div>
+    <div class="summary" style="margin-top:14px">
+      <div class="scard acc-in"><div class="lbl">Total entrées</div><div class="val tnum" id="repIn">0<small> kg</small></div></div>
+      <div class="scard acc-out"><div class="lbl">Total sorties</div><div class="val tnum" id="repOut">0<small> kg</small></div></div>
+      <div class="scard acc-gold"><div class="lbl">Variation nette</div><div class="val tnum" id="repNet">0<small> kg</small></div></div>
+    </div>
+    <div class="section-title">Mouvements de la journée</div>
+    <div id="repList"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="App.printReport()">🖨️ Imprimer / PDF</button>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN ============ -->
+  <section id="scr-adm" class="screen">
+    <div id="admGate" class="gate">
+      <div class="lock">🔒</div>
+      <p class="lead" style="margin-top:8px">Espace interne protégé — prix d'achat, produits et données.</p>
+      <div class="field" style="max-width:240px;margin:0 auto">
+        <input type="password" id="admPass" class="num" inputmode="numeric" placeholder="••••">
+      </div>
+      <div style="max-width:240px;margin:14px auto 0">
+        <button class="btn btn-dark" onclick="App.unlock()">Déverrouiller</button>
+      </div>
+    </div>
+
+    <div id="admPanel" style="display:none">
+      <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayAdm"></span></div>
+      <div class="section-title" style="margin-top:4px">Produits & prix d'achat (₺/kg)</div>
+      <p class="lead" style="margin-top:0">Le prix au kilo sert au calcul des valeurs. Le « format » est le poids d'une unité utilisée en production.</p>
+      <div id="admList"></div>
+      <button class="btn btn-ghost" style="margin-top:6px" onclick="App.addProductPrompt()">＋ Ajouter un produit</button>
+
+      <div class="section-title">Synchronisation (3 téléphones)</div>
+      <div id="syncBox"></div>
+
+      <div class="section-title">Données</div>
+      <div class="btn-row">
+        <button class="btn btn-dark" onclick="App.exportJSON()">⬇️ Exporter (JSON)</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">⬆️ Importer</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="App.importJSON(event)">
+
+      <div class="section-title">Sécurité</div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="App.changePass()">Changer le code</button>
+        <button class="btn btn-danger" onclick="App.resetAll()">Réinitialiser</button>
+      </div>
+      <p class="lead" style="margin-top:20px;text-align:center">Gestion de Stock · fonctionne hors-ligne · données enregistrées sur cet appareil.</p>
+    </div>
+  </section>
+</main>
+
+<!-- Overlay générique -->
+<div class="ov" id="ov"><div class="sheet" id="ovSheet"></div></div>
+
+<div id="toast"></div>
+
+<nav>
+  <button class="nav-b on in" data-tab="in" onclick="App.go('in')"><span class="ni">📥</span><span class="nl">Réception</span></button>
+  <button class="nav-b" data-tab="out" onclick="App.go('out')"><span class="ni">📤</span><span class="nl">Production</span></button>
+  <button class="nav-b" data-tab="inv" onclick="App.go('inv')"><span class="ni">📦</span><span class="nl">Inventaire</span></button>
+  <button class="nav-b" data-tab="rep" onclick="App.go('rep')"><span class="ni">📊</span><span class="nl">Rapport</span></button>
+  <button class="nav-b" data-tab="adm" onclick="App.go('adm')"><span class="ni">⚙️</span><span class="nl">Admin</span></button>
+</nav>
+
+<script>
+"use strict";
+(function(){
+const KEY="gestionStock_v2", OLD_KEY="gestionStock_v1", SYNC_KEY="gestionStock_sync";
+
+const DEFAULT_PRODUCTS=[
+  "ANTEP FISTIĞI","BADEM","BAHARATLI ÇEKİRDEK","BEYAZ NOHUT","ÇAKIL TAŞI",
+  "ÇITIR LEBLEBİ","FINDIK","FISTIK","FISTIK S1","KABAK ÇEKİRDEĞİ",
+  "KABUKLU FISTIK TUZLU","KABUKLU FISTIK TUZSUZ","KAJU","KAJU KABUKLU",
+  "RENKLİ ÇİKOLATALI LEBLEBİ","SADE LEBLEBİ","ŞEKERLİ LEBLEBİ","ÇEKİRDEK",
+  "SOSLU FISTIK","SOSLU MISIR","SUSAMLI FISTIK","SUSAMLI LEBLEBİ","TUZLU FINDIK",
+  "TUZLU LEBLEBİ","TUZSUZ SİYAH ÇEKİRDEK","ÜZÜM"
+];
+
+let D=null;          // {products:{id:{...}}, movements:{id:{...}}, settings:{...}}
+let SC=null;         // config sync local (NON synchronisée)
+let unlocked=false, curTab="in";
+let online=navigator.onLine, syncing=false, pushDebounce=null;
+
+// ---------- utilitaires ----------
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+function now(){ return Date.now(); }
+function r3(n){ return Math.round((n||0)*1000)/1000; }
+function todayStr(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function numFR(n,d){ d=(d===undefined)?2:d; const v=Math.round((n||0)*Math.pow(10,d))/Math.pow(10,d);
+  return v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:d}); }
+function kg(n){ return numFR(n,(Math.abs(n)<10 && n%1!==0)?2:1); }
+function money(n){ return numFR(n,0)+" ₺"; }
+function parseNum(s){ if(s==null) return NaN; return parseFloat(String(s).replace(",",".").trim()); }
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function attr(s){ return String(s).replace(/"/g,"&quot;"); }
+function frDate(iso){ if(!iso) return ""; const [y,m,d]=iso.split("-");
+  const mois=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+  return `${parseInt(d,10)} ${mois[parseInt(m,10)-1]} ${y}`; }
+function hhmm(ts){ if(!ts) return ""; const d=new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
+
+// ---------- modèle ----------
+function prod(id){ return D.products[id]; }
+function activeProducts(){ return Object.values(D.products).filter(p=>!p.deleted).sort((a,b)=>(a.name||"").localeCompare(b.name||"","tr")); }
+function activeMovements(){ return Object.values(D.movements).filter(m=>!m.deleted); }
+function nextOrder(){ let mx=-1; Object.values(D.products).forEach(p=>{ if((p.order||0)>mx) mx=p.order||0; }); return mx+1; }
+function stockMap(){
+  const map={}; activeProducts().forEach(p=>map[p.id]=p.initialKg||0);
+  activeMovements().forEach(m=>{ if(map[m.productId]!=null) map[m.productId]=r3(map[m.productId]+m.kg); });
+  return map;
+}
+function stockOf(id){ return stockMap()[id]||0; }
+
+function freshData(){
+  const products={};
+  DEFAULT_PRODUCTS.forEach((n,i)=>{ const id=uid(); products[id]={id,name:n,pricePerKg:0,pkgKg:5,initialKg:0,order:i,updatedAt:now(),deleted:false}; });
+  return { products, movements:{}, settings:{ adminPass:"1234" } };
+}
+
+function migrateV1(v1){
+  const products={}, movements={};
+  // somme des mouvements par produit pour caler initialKg sur l'ancien stockKg
+  const net={};
+  (v1.receptions||[]).forEach(r=>{ net[r.productId]=(net[r.productId]||0)+r.totalKg; });
+  (v1.productions||[]).forEach(r=>{ net[r.productId]=(net[r.productId]||0)-r.totalKg; });
+  (v1.products||[]).forEach((p,i)=>{
+    const name=(p.name==="SİYAH ÇEKİRDEK")?"ÇEKİRDEK":p.name;
+    products[p.id]={ id:p.id, name, pricePerKg:p.pricePerKg||0, pkgKg:(typeof p.pkgKg==="number"?p.pkgKg:5),
+      initialKg:r3((p.stockKg||0)-(net[p.id]||0)), order:i, updatedAt:now(), deleted:false };
+  });
+  (v1.receptions||[]).forEach(r=>{ movements[r.id]={ id:r.id, type:"rec", productId:r.productId, kg:r.totalKg,
+    qty:r.qty, pkgSize:r.pkgSize, date:r.date, ts:r.ts||now(), updatedAt:r.ts||now(), deleted:false }; });
+  (v1.productions||[]).forEach(r=>{ movements[r.id]={ id:r.id, type:"pro", productId:r.productId, kg:-r.totalKg,
+    units:r.units, kgPerUnit:r.kgPerUnit, date:r.date, ts:r.ts||now(), updatedAt:r.ts||now(), deleted:false }; });
+  return { products, movements, settings:{ adminPass:(v1.settings&&v1.settings.adminPass)||"1234" } };
+}
+
+function load(){
+  try{ const raw=localStorage.getItem(KEY); if(raw) D=JSON.parse(raw); }catch(e){ D=null; }
+  if(!D || !D.products){
+    try{ const old=localStorage.getItem(OLD_KEY); if(old){ D=migrateV1(JSON.parse(old)); save(); } }catch(e){ D=null; }
+  }
+  if(!D || !D.products){ D=freshData(); save(); }
+  if(!D.settings) D.settings={adminPass:"1234"};
+  if(!D.movements) D.movements={};
+  // garde-fous
+  Object.values(D.products).forEach(p=>{ if(typeof p.initialKg!=="number") p.initialKg=0; if(typeof p.pkgKg!=="number") p.pkgKg=5; if(typeof p.pricePerKg!=="number") p.pricePerKg=0; if(typeof p.order!=="number") p.order=0; if(!p.updatedAt) p.updatedAt=now(); });
+  // config sync
+  try{ SC=JSON.parse(localStorage.getItem(SYNC_KEY)); }catch(e){ SC=null; }
+  if(!SC) SC={ url:"", auto:true, lastSync:0, lastError:"", dirty:{products:{},movements:{}} };
+  if(!SC.dirty) SC.dirty={products:{},movements:{}};
+}
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(D)); }catch(e){ toast("Erreur d'enregistrement"); } scheduleAutoPush(); }
+function saveSync(){ try{ localStorage.setItem(SYNC_KEY,JSON.stringify(SC)); }catch(e){} }
+
+function markDirty(coll,id){ SC.dirty[coll][id]=true; saveSync(); }
+function pendingCount(){ return Object.keys(SC.dirty.products).length+Object.keys(SC.dirty.movements).length; }
+
+// écritures modèle
+function pushMovement(o){ o.id=uid(); o.ts=now(); o.updatedAt=now(); o.deleted=false; D.movements[o.id]=o; markDirty("movements",o.id); save(); }
+function softDeleteMovement(id){ const m=D.movements[id]; if(m){ m.deleted=true; m.updatedAt=now(); markDirty("movements",id); save(); } }
+function touchProduct(id){ const p=prod(id); if(p){ p.updatedAt=now(); markDirty("products",id); } }
+
+// ---------- toast ----------
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
+
+// ---------- overlay ----------
+const ov=document.getElementById("ov"), ovSheet=document.getElementById("ovSheet");
+function openSheet(html,ctxOut){ ovSheet.className="sheet"+(ctxOut?" screen-out-ctx":""); ovSheet.innerHTML=html; ov.classList.add("show"); }
+function closeSheet(){ ov.classList.remove("show"); }
+ov.addEventListener("click",e=>{ if(e.target===ov) closeSheet(); });
+
+// liste des dernières saisies d'un produit (dans le panneau), annulation à 2 temps
+function historyRows(type,pid){
+  const list=activeMovements().filter(m=>m.type===type&&m.productId===pid).sort((a,b)=>b.ts-a.ts).slice(0,6);
+  if(!list.length) return `<div class="empty" style="padding:14px">Aucune saisie pour ce produit.</div>`;
+  return list.map(r=>{
+    const cls=type==="rec"?"in":"out", amt=(type==="rec"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg";
+    const detail=type==="rec"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`;
+    const when=(r.date===todayStr()?"Aujourd'hui":frDate(r.date))+" · "+hhmm(r.ts);
+    if(App._armed===r.id){
+      return `<div class="logrow armed"><div class="li"><b>Annuler cette saisie&nbsp;?</b><span>${detail} · ${when}</span></div>
+        <button class="undo" onclick="App.doUndoInline('${type}','${r.id}','${pid}')">Confirmer</button>
+        <button class="keepbtn" onclick="App.disarmUndo()">Non</button></div>`;
+    }
+    return `<div class="logrow"><div class="li"><b>${detail}</b><span>${when}</span></div>
+      <div class="amt ${cls}">${amt}</div>
+      <button class="undo" onclick="App.armUndo('${r.id}')">Annuler</button></div>`;
+  }).join("");
+}
+
+// =========================================================
+//  SYNCHRONISATION (Firebase Realtime Database via REST)
+// =========================================================
+function normUrl(u){ u=(u||"").trim(); if(!u) return ""; if(!/^https?:\/\//.test(u)) u="https://"+u; return u.replace(/\/+$/,""); }
+function ep(path){ return normUrl(SC.url)+"/"+path+".json"; }
+
+function setSyncStatus(){
+  const stEl=document.getElementById("hSyncState"); if(!stEl) return;
+  let txt,color;
+  if(!SC.url){ txt="non configurée"; color="#bcb6a8"; }
+  else if(syncing){ txt="en cours…"; color="#caa64a"; }
+  else if(SC.lastError){ txt="erreur"; color="#e0795f"; }
+  else if(!online){ txt="hors-ligne"; color="#bcb6a8"; }
+  else if(SC.lastSync){ txt="à jour · "+hhmm(SC.lastSync); color="#9fd17a"; }
+  else { txt="prête"; color="#9fd17a"; }
+  const pc=pendingCount(); if(pc>0 && !syncing) txt+=" ("+pc+" en attente)";
+  stEl.textContent=txt; stEl.style.color=color;
+  if(curTab==="adm" && unlocked) App.renderSync();
+}
+
+async function syncNow(manual){
+  if(!SC.url){ if(manual) toast("Indiquez d'abord l'adresse de la base"); setSyncStatus(); return; }
+  if(syncing) return;
+  syncing=true; SC.lastError=""; setSyncStatus();
+  try{
+    // 1) lire le distant
+    const [rp,rm]=await Promise.all([ fetchJSON(ep("products")), fetchJSON(ep("movements")) ]);
+    const remoteP=rp||{}, remoteM=rm||{};
+    // 2) fusion (le plus récent gagne, par updatedAt) + détermination de ce qu'il faut envoyer
+    const toPush={products:[],movements:[]};
+    mergeColl("products",remoteP,toPush);
+    mergeColl("movements",remoteM,toPush);
+    save(); // état fusionné local
+    // 3) envoyer nos versions gagnantes
+    for(const id of toPush.products){ await putJSON(ep("products/"+id), D.products[id]); delete SC.dirty.products[id]; }
+    for(const id of toPush.movements){ await putJSON(ep("movements/"+id), D.movements[id]); delete SC.dirty.movements[id]; }
+    SC.lastSync=now(); SC.lastError=""; saveSync();
+    syncing=false; setSyncStatus(); App.renderAll();
+    if(manual) toast("Synchronisé");
+  }catch(e){
+    syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus();
+    if(manual) toast("Échec : "+SC.lastError);
+  }
+}
+function mergeColl(coll,remote,toPush){
+  const local=D[coll];
+  const ids=new Set([...Object.keys(local),...Object.keys(remote)]);
+  ids.forEach(id=>{
+    const l=local[id], rrec=remote[id];
+    if(l && !rrec){ toPush[coll].push(id); }                         // nouveau chez nous
+    else if(!l && rrec){ local[id]=rrec; }                            // nouveau chez eux
+    else if(l && rrec){
+      const lu=l.updatedAt||0, ru=rrec.updatedAt||0;
+      if(ru>lu){ local[id]=rrec; delete SC.dirty[coll][id]; }         // eux plus récents
+      else if(lu>ru){ toPush[coll].push(id); }                        // nous plus récents
+      else { /* égal : rien */ }
+    }
+  });
+  // toujours renvoyer ce qui est marqué "à envoyer" même si égal en apparence
+  Object.keys(SC.dirty[coll]).forEach(id=>{ if(local[id] && !toPush[coll].includes(id)) toPush[coll].push(id); });
+}
+async function fetchJSON(url){
+  const res=await fetch(url,{method:"GET"});
+  if(!res.ok) throw new Error("lecture "+res.status);
+  return await res.json();
+}
+async function putJSON(url,obj){
+  const res=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});
+  if(!res.ok) throw new Error("écriture "+res.status);
+  return await res.json();
+}
+function scheduleAutoPush(){
+  if(!SC||!SC.auto||!SC.url||!online) return;
+  clearTimeout(pushDebounce); pushDebounce=setTimeout(()=>syncNow(false),1500);
+}
+function syncTick(){ if(SC&&SC.auto&&SC.url&&online&&!syncing) syncNow(false); }
+
+// =========================================================
+//  App
+// =========================================================
+const App={
+  _armed:null, _ctx:null,
+
+  go(tab){
+    curTab=tab;
+    document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+    document.getElementById("scr-"+tab).classList.add("active");
+    document.querySelectorAll(".nav-b").forEach(b=>{
+      b.classList.toggle("on",b.dataset.tab===tab);
+      b.classList.toggle("in",b.dataset.tab===tab&&tab==="in");
+      b.classList.toggle("out",b.dataset.tab===tab&&tab==="out");
+    });
+    document.body.classList.toggle("screen-in",tab==="in");
+    document.body.classList.toggle("screen-out",tab==="out");
+    const badge=document.getElementById("modeBadge");
+    const L={in:["Réception","in"],out:["Production","out"],inv:["Inventaire","neutral"],rep:["Rapport","neutral"],adm:["Admin","neutral"]};
+    badge.textContent=L[tab][0]; badge.className="h-mode "+L[tab][1];
+    window.scrollTo(0,0); this.renderAll();
+  },
+
+  renderAll(){
+    this.renderHeader(); this.renderDayChips();
+    if(curTab==="in"||curTab==="out"){ this.renderGrids(); this.renderLogs(); }
+    if(curTab==="inv") this.renderInv();
+    if(curTab==="rep") this.renderRep();
+    if(curTab==="adm") this.renderAdmin();
+    setSyncStatus();
+  },
+
+  renderHeader(){
+    const sm=stockMap(); let totKg=0,totVal=0;
+    activeProducts().forEach(p=>{ totKg+=sm[p.id]||0; totVal+=(sm[p.id]||0)*p.pricePerKg; });
+    document.getElementById("hTotalKg").textContent=kg(totKg)+" kg";
+    document.getElementById("hTotalVal").textContent=money(totVal);
+  },
+
+  renderDayChips(){ const t=frDate(todayStr());
+    ["dayIn","dayOut","dayInv","dayRep","dayAdm"].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=t; }); },
+
+  renderGrids(){
+    const date=document.getElementById("workDate").value||todayStr();
+    const mv=activeMovements();
+    const recDay=mv.filter(m=>m.type==="rec"&&m.date===date), proDay=mv.filter(m=>m.type==="pro"&&m.date===date);
+    const sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
+    document.getElementById("inKgDay").innerHTML=kg(sum(recDay,m=>m.kg))+"<small> kg</small>";
+    document.getElementById("inPkgDay").textContent=sum(recDay,m=>m.qty||0);
+    document.getElementById("inProdDay").textContent=new Set(recDay.map(m=>m.productId)).size;
+    document.getElementById("outKgDay").innerHTML=kg(sum(proDay,m=>-m.kg))+"<small> kg</small>";
+    document.getElementById("outPkgDay").textContent=sum(proDay,m=>m.units||0);
+    document.getElementById("outProdDay").textContent=new Set(proDay.map(m=>m.productId)).size;
+
+    const sm=stockMap();
+    const tile=p=>{ const s=sm[p.id]||0; let cls="ok",txt=kg(s)+" kg";
+      if(s<=0){ cls="empty"; txt="Rupture"; } else if(s<p.pkgKg){ cls="low"; }
+      return `<button class="pbtn" onclick="App.pick('${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
+    document.getElementById("gridIn").innerHTML=activeProducts().map(tile).join("")+
+      `<button class="pbtn add" onclick="App.addProductPrompt()"><span class="plus">＋</span>Ajouter un produit</button>`;
+    document.getElementById("gridOut").innerHTML=activeProducts().map(tile).join("");
+  },
+
+  renderLogs(){
+    const today=todayStr(), tag=iso=>iso===today?"":`<span class="tag">${frDate(iso)}</span>`;
+    const mv=activeMovements();
+    const rec=mv.filter(m=>m.type==="rec").sort((a,b)=>b.ts-a.ts).slice(0,25);
+    const pro=mv.filter(m=>m.type==="pro").sort((a,b)=>b.ts-a.ts).slice(0,25);
+    document.getElementById("logIn").innerHTML=rec.length?rec.map(r=>{ const p=prod(r.productId);
+      return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${r.qty} × ${kg(r.pkgSize)} kg · ${hhmm(r.ts)}</span></div>
+        <div class="amt in">+ ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.undoMovement('${r.id}')">Annuler</button></div>`;
+    }).join(""):`<div class="empty">Aucune réception enregistrée pour le moment.</div>`;
+    document.getElementById("logOut").innerHTML=pro.length?pro.map(r=>{ const p=prod(r.productId);
+      return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${r.units} × ${kg(r.kgPerUnit)} kg · ${hhmm(r.ts)}</span></div>
+        <div class="amt out">− ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.undoMovement('${r.id}')">Annuler</button></div>`;
+    }).join(""):`<div class="empty">Aucune production enregistrée pour le moment.</div>`;
+  },
+
+  // ---------- sélection produit ----------
+  pick(id){ if(curTab==="in") this.sheetReception(id); else this.sheetProduction(id); },
+
+  armUndo(id){ this._armed=id; this._refreshHist(); },
+  disarmUndo(){ this._armed=null; this._refreshHist(); },
+  _refreshHist(){ const box=document.getElementById("histBox"); if(box&&this._ctx) box.innerHTML=historyRows(this._ctx.type,this._ctx.pid); },
+  doUndoInline(type,id,pid){ softDeleteMovement(id); this._armed=null; toast("Saisie annulée"); this.renderHeader();
+    if(type==="rec") this.sheetReception(pid); else this.sheetProduction(pid); },
+  undoMovement(id){
+    const m=D.movements[id]; if(!m) return; const p=prod(m.productId);
+    const isRec=m.type==="rec";
+    openSheet(`<h3>Annuler cette saisie ?</h3>
+      <div class="sub">${esc(p?p.name:"")} · ${kg(Math.abs(m.kg))} kg.<br>${isRec?"Ces kilos seront retirés du stock.":"Ces kilos seront remis dans le stock."}</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="window._umCancel()">Garder</button>
+      <button class="btn btn-danger" onclick="window._umOk()">Annuler la saisie</button></div>`, !isRec);
+    window._umCancel=closeSheet;
+    window._umOk=()=>{ softDeleteMovement(id); closeSheet(); toast("Saisie annulée"); App.renderAll(); };
+  },
+
+  // ========== RÉCEPTION ==========
+  sheetReception(id){
+    const p=prod(id); App._ctx={type:"rec",pid:id}; App._armed=null;
+    const st={size:5,custom:"",qty:1};
+    const render=()=>{ const total=(st.size||0)*(st.qty||0);
+      openSheet(`<h3>${esc(p.name)}</h3>
+        <div class="sub">Réception · stock actuel ${kg(stockOf(id))} kg</div>
+        <label style="display:block;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Format du colis</label>
+        <div class="pills">
+          <div class="pill ${st.size===5?'sel':''}" onclick="window._rcSize(5)">5 kg</div>
+          <div class="pill ${st.size===10?'sel':''}" onclick="window._rcSize(10)">10 kg</div>
+          <div class="pill ${(st.size!==5&&st.size!==10)?'sel':''}" onclick="window._rcSize('autre')">Autre</div>
+        </div>
+        ${(st.size!==5&&st.size!==10)?`<div class="field" style="margin-top:10px"><label>Poids d'un colis (kg)</label>
+          <input class="num" id="rcCustom" inputmode="decimal" value="${st.custom}" placeholder="ex. 3" oninput="window._rcCustom(this.value)"></div>`:''}
+        <div class="field"><label>Nombre de colis / pochettes</label>
+          <div class="stepper"><button class="step-b" onclick="window._rcQty(-1)">−</button>
+          <input class="num tnum" id="rcQty" inputmode="numeric" value="${st.qty}" oninput="window._rcQtyInput(this.value)">
+          <button class="step-b" onclick="window._rcQty(1)">＋</button></div></div>
+        <div class="calc">Total reçu<div class="big in tnum">+ ${kg(total)} kg</div>
+          <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${st.qty} × ${kg(st.size||0)} kg · nouveau stock ${kg(stockOf(id)+total)} kg</div></div>
+        <div class="btn-row"><button class="btn btn-ghost" onclick="window._rcCancel()">Fermer</button>
+          <button class="btn btn-in" onclick="window._rcSave()">Enregistrer</button></div>
+        <div class="section-title" style="margin-top:22px">Dernières saisies de ce produit</div>
+        <div id="histBox">${historyRows("rec",id)}</div>`, false);
+    };
+    const upd=()=>{ const total=(st.size||0)*(st.qty||0); const c=ovSheet.querySelector(".calc");
+      if(c) c.innerHTML=`Total reçu<div class="big in tnum">+ ${kg(total)} kg</div>
+        <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${st.qty} × ${kg(st.size||0)} kg · nouveau stock ${kg(stockOf(id)+total)} kg</div>`; };
+    window._rcSize=v=>{ if(v==='autre'){ st.size=parseNum(st.custom)||0; if(st.size===5||st.size===10) st.size=0; } else st.size=v; render(); };
+    window._rcCustom=v=>{ st.custom=v; st.size=parseNum(v)||0; upd(); };
+    window._rcQty=d=>{ st.qty=Math.max(1,(st.qty||0)+d); render(); };
+    window._rcQtyInput=v=>{ st.qty=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
+    window._rcCancel=closeSheet;
+    window._rcSave=()=>{ if(!st.size||st.size<=0){ toast("Format invalide"); return; } if(!st.qty||st.qty<=0){ toast("Quantité invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr(); const total=st.size*st.qty;
+      pushMovement({type:"rec",productId:id,kg:r3(total),qty:st.qty,pkgSize:st.size,date});
+      closeSheet(); toast("Réception : +"+kg(total)+" kg · "+p.name); App.renderAll(); };
+    render();
+  },
+
+  // ========== PRODUCTION ==========
+  sheetProduction(id){
+    const p=prod(id); App._ctx={type:"pro",pid:id}; App._armed=null;
+    const st={units:1,perUnit:p.pkgKg||5};
+    const render=()=>{ const total=(st.perUnit||0)*(st.units||0), after=stockOf(id)-total;
+      openSheet(`<h3>${esc(p.name)}</h3>
+        <div class="sub">Production · stock actuel ${kg(stockOf(id))} kg</div>
+        <div class="field" style="margin-top:0"><label>Unités prélevées (colis / pochettes)</label>
+          <div class="stepper"><button class="step-b" onclick="window._pdUnits(-1)">−</button>
+          <input class="num tnum" id="pdUnits" inputmode="numeric" value="${st.units}" oninput="window._pdInput(this.value)">
+          <button class="step-b" onclick="window._pdUnits(1)">＋</button></div></div>
+        <div class="field"><label>Poids d'une unité (kg)</label>
+          <input class="num" id="pdPer" inputmode="decimal" value="${st.perUnit}" oninput="window._pdPer(this.value)"></div>
+        <div class="calc">Sortie de stock<div class="big out tnum">− ${kg(total)} kg</div>
+          <div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">${st.units} × ${kg(st.perUnit||0)} kg · stock après ${kg(after)} kg ${after<0?'⚠️ négatif':''}</div></div>
+        <div class="btn-row"><button class="btn btn-ghost" onclick="window._pdCancel()">Fermer</button>
+          <button class="btn btn-out" onclick="window._pdSave()">Enregistrer</button></div>
+        <div class="section-title" style="margin-top:22px">Dernières saisies de ce produit</div>
+        <div id="histBox">${historyRows("pro",id)}</div>`, true);
+    };
+    const upd=()=>{ const total=(st.perUnit||0)*(st.units||0), after=stockOf(id)-total; const c=ovSheet.querySelector(".calc");
+      if(c) c.innerHTML=`Sortie de stock<div class="big out tnum">− ${kg(total)} kg</div>
+        <div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">${st.units} × ${kg(st.perUnit||0)} kg · stock après ${kg(after)} kg ${after<0?'⚠️ négatif':''}</div>`; };
+    window._pdUnits=d=>{ st.units=Math.max(1,(st.units||0)+d); render(); };
+    window._pdInput=v=>{ st.units=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
+    window._pdPer=v=>{ st.perUnit=parseNum(v)||0; upd(); };
+    window._pdCancel=closeSheet;
+    window._pdSave=()=>{ if(!st.units||st.units<=0){ toast("Nombre d'unités invalide"); return; } if(!st.perUnit||st.perUnit<=0){ toast("Poids d'unité invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr(); const total=st.perUnit*st.units;
+      if(st.perUnit!==p.pkgKg){ p.pkgKg=st.perUnit; touchProduct(id); }
+      pushMovement({type:"pro",productId:id,kg:r3(-total),units:st.units,kgPerUnit:st.perUnit,date});
+      closeSheet(); toast("Production : −"+kg(total)+" kg · "+p.name); App.renderAll(); };
+    render();
+  },
+
+  // ---------- INVENTAIRE ----------
+  renderInv(){
+    const q=(document.getElementById("invSearch").value||"").toLocaleLowerCase("tr");
+    const sm=stockMap(); let totKg=0,totVal=0,empty=0;
+    activeProducts().forEach(p=>{ const s=sm[p.id]||0; totKg+=s; totVal+=s*p.pricePerKg; if(s<=0) empty++; });
+    document.getElementById("invTotalKg").innerHTML=kg(totKg)+"<small> kg</small>";
+    document.getElementById("invTotalVal").innerHTML=numFR(totVal,0)+"<small> ₺</small>";
+    document.getElementById("invEmpty").textContent=empty;
+    const maxVal=Math.max(1,...activeProducts().map(p=>(sm[p.id]||0)*p.pricePerKg));
+    const rows=activeProducts().filter(p=>!q||p.name.toLocaleLowerCase("tr").includes(q))
+      .sort((a,b)=>a.name.localeCompare(b.name,"tr")).map(p=>{
+        const s=sm[p.id]||0, val=s*p.pricePerKg, w=Math.max(2,(val/maxVal)*100);
+        return `<div class="invrow"><div class="nm"><b>${esc(p.name)}</b>
+          <span>${p.pricePerKg>0?numFR(p.pricePerKg,2)+" ₺/kg":"prix non renseigné"} · unité ${kg(p.pkgKg)} kg</span>
+          <div class="bar"><i style="width:${w}%"></i></div></div>
+          <div class="kg">${kg(s)} kg<small>${money(val)}</small></div></div>`; }).join("");
+    document.getElementById("invList").innerHTML=rows||`<div class="empty">Aucun produit.</div>`;
+  },
+
+  // ---------- RAPPORT ----------
+  renderRep(){
+    const dEl=document.getElementById("repDate"); if(!dEl.value) dEl.value=todayStr(); const date=dEl.value;
+    document.getElementById("repNotice").innerHTML="";
+    const mv=activeMovements().filter(m=>m.date===date);
+    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; if(m.kg>=0) e.in+=m.kg; else e.out+=-m.kg; });
+    const ids=Object.keys(map); let tIn=0,tOut=0; ids.forEach(id=>{ tIn+=map[id].in; tOut+=map[id].out; });
+    document.getElementById("repIn").innerHTML=kg(tIn)+"<small> kg</small>";
+    document.getElementById("repOut").innerHTML=kg(tOut)+"<small> kg</small>";
+    const net=tIn-tOut; document.getElementById("repNet").innerHTML=(net>=0?"+":"−")+kg(Math.abs(net))+"<small> kg</small>";
+    if(!ids.length){ document.getElementById("repList").innerHTML=`<div class="empty">Aucun mouvement le ${frDate(date)}.</div>`; return; }
+    const head=`<div class="rrow head"><div>Produit</div><div class="rin">Entrée</div><div class="rout">Sortie</div><div class="rnet">Net</div></div>`;
+    const rows=ids.sort((a,b)=>(map[b].in+map[b].out)-(map[a].in+map[a].out)).map(id=>{ const p=prod(id); if(!p) return "";
+      const m=map[id], n=m.in-m.out;
+      return `<div class="rrow"><div class="rname">${esc(p.name)}</div>
+        <div class="rin">${m.in?("+"+kg(m.in)):"—"}</div><div class="rout">${m.out?("−"+kg(m.out)):"—"}</div>
+        <div class="rnet" style="color:${n>=0?'var(--in-deep)':'var(--out-deep)'}">${n>=0?"+":"−"}${kg(Math.abs(n))}</div></div>`; }).join("");
+    document.getElementById("repList").innerHTML=head+rows;
+  },
+  printReport(){
+    const date=document.getElementById("repDate").value||todayStr();
+    const mv=activeMovements().filter(m=>m.date===date);
+    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; if(m.kg>=0) e.in+=m.kg; else e.out+=-m.kg; });
+    const ids=Object.keys(map);
+    let body=ids.map(id=>{ const p=prod(id), m=map[id], n=m.in-m.out;
+      return `<tr><td>${esc(p?p.name:id)}</td><td style="text-align:right;color:#2c6">${m.in?"+"+kg(m.in):"—"}</td>
+      <td style="text-align:right;color:#a42">${m.out?"−"+kg(m.out):"—"}</td><td style="text-align:right;font-weight:700">${n>=0?"+":"−"}${kg(Math.abs(n))}</td></tr>`; }).join("");
+    if(!body) body=`<tr><td colspan="4" style="text-align:center;color:#999;padding:20px">Aucun mouvement</td></tr>`;
+    const w=window.open("","_blank"); if(!w){ toast("Autorisez l'ouverture de fenêtre"); return; }
+    w.document.write(`<html><head><title>Rapport ${date}</title><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:18px}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}th,td{padding:7px 8px;border-bottom:1px solid #ddd}th{text-align:left;background:#f3f0ea}</style></head><body><h1>Rapport de stock — ${frDate(date)}</h1><table><thead><tr><th>Produit</th><th style="text-align:right">Entrée (kg)</th><th style="text-align:right">Sortie (kg)</th><th style="text-align:right">Net (kg)</th></tr></thead><tbody>${body}</tbody></table></body></html>`);
+    w.document.close(); setTimeout(()=>w.print(),350);
+  },
+
+  // ---------- ADMIN ----------
+  unlock(){ if(document.getElementById("admPass").value===D.settings.adminPass){ unlocked=true;
+      document.getElementById("admGate").style.display="none"; document.getElementById("admPanel").style.display="block";
+      document.getElementById("admPass").value=""; this.renderAdmin(); } else toast("Code incorrect"); },
+  renderAdmin(){
+    if(!unlocked){ document.getElementById("admGate").style.display="block"; document.getElementById("admPanel").style.display="none"; return; }
+    const sm=stockMap();
+    document.getElementById("admList").innerHTML=activeProducts().map(p=>`
+      <div class="adrow"><div class="ai"><b>${esc(p.name)}</b>
+        <span>${p.pricePerKg>0?numFR(p.pricePerKg,2)+" ₺/kg":"prix —"} · format ${kg(p.pkgKg)} kg · stock ${kg(sm[p.id]||0)} kg</span></div>
+        <button class="icon-b" onclick="App.editProduct('${p.id}')">✏️</button>
+        <button class="icon-b del" onclick="App.deleteProduct('${p.id}')">🗑️</button></div>`).join("");
+    this.renderSync();
+  },
+  renderSync(){
+    const box=document.getElementById("syncBox"); if(!box) return;
+    let dot="off",label;
+    if(!SC.url){ dot="off"; label="Non configurée"; }
+    else if(syncing){ dot="busy"; label="Synchronisation en cours…"; }
+    else if(SC.lastError){ dot="err"; label="Erreur : "+esc(SC.lastError); }
+    else if(!online){ dot="off"; label="Hors-ligne — reprise au retour du réseau"; }
+    else if(SC.lastSync){ dot="ok"; label="À jour — dernière synchro "+hhmm(SC.lastSync); }
+    else { dot="ok"; label="Prête"; }
+    const pc=pendingCount();
+    box.innerHTML=`<div class="synccard">
+      <div class="syncstat"><span class="sdot ${dot}"></span>${label}</div>
+      <div class="syncsub">${pc>0?(pc+" saisie(s) en attente d'envoi. "):""}Les 3 téléphones doivent utiliser la même adresse.</div>
+      <input class="syncin" id="syncUrl" placeholder="https://votre-projet-default-rtdb.firebasedatabase.app" value="${attr(SC.url)}">
+      <div class="btn-row" style="margin-top:0">
+        <button class="btn btn-ghost" onclick="App.saveSyncUrl()">Enregistrer l'adresse</button>
+        <button class="btn btn-dark" onclick="App.syncManual()">🔄 Synchroniser</button>
+      </div>
+      <div class="toggle">Synchronisation automatique
+        <div class="sw ${SC.auto?'on':''}" onclick="App.toggleAuto()"><i></i></div></div>
+    </div>`;
+  },
+  saveSyncUrl(){ const v=document.getElementById("syncUrl").value; SC.url=normUrl(v); SC.lastError=""; saveSync();
+    toast(SC.url?"Adresse enregistrée":"Adresse effacée"); this.renderSync(); if(SC.url) syncNow(true); },
+  syncManual(){ const el=document.getElementById("syncUrl"); if(el){ const v=normUrl(el.value); if(v!==SC.url){ SC.url=v; saveSync(); } } syncNow(true); },
+  toggleAuto(){ SC.auto=!SC.auto; saveSync(); this.renderSync(); if(SC.auto) syncNow(false); },
+
+  editProduct(id){ const p=prod(id);
+    openSheet(`<h3>Modifier le produit</h3><div class="sub">Prix d'achat, format d'unité et correction de stock.</div>
+      <div class="ed-field"><label>Nom</label><input id="epName" value="${attr(p.name)}"></div>
+      <div class="ed-field"><label>Prix d'achat (₺/kg)</label><input id="epPrice" inputmode="decimal" value="${p.pricePerKg||""}"></div>
+      <div class="ed-field"><label>Poids d'une unité en production (kg)</label><input id="epPkg" inputmode="decimal" value="${p.pkgKg}"></div>
+      <div class="ed-field"><label>Stock actuel (kg) — correction</label><input id="epStock" inputmode="decimal" value="${stockOf(id)}"></div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="window._epCancel()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._epSave()">Enregistrer</button></div>`,false);
+    window._epCancel=closeSheet;
+    window._epSave=()=>{ const nm=document.getElementById("epName").value.trim(); if(!nm){ toast("Nom requis"); return; }
+      p.name=nm; p.pricePerKg=Math.max(0,parseNum(document.getElementById("epPrice").value)||0);
+      p.pkgKg=Math.max(0.001,parseNum(document.getElementById("epPkg").value)||5);
+      touchProduct(id);
+      const target=Math.max(0,parseNum(document.getElementById("epStock").value)||0), cur=stockOf(id), delta=r3(target-cur);
+      if(delta!==0) pushMovement({type:"adj",productId:id,kg:delta,note:"Correction admin",date:todayStr()});
+      save(); closeSheet(); toast("Produit mis à jour"); App.renderAll(); };
+  },
+  deleteProduct(id){ const p=prod(id);
+    openSheet(`<h3>Supprimer ce produit ?</h3><div class="sub">« ${esc(p.name)} » sera retiré de la liste sur tous les téléphones synchronisés.</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="window._dCancel()">Annuler</button>
+      <button class="btn btn-danger" onclick="window._dOk()">Supprimer</button></div>`,false);
+    window._dCancel=closeSheet;
+    window._dOk=()=>{ p.deleted=true; p.updatedAt=now(); markDirty("products",id); save(); closeSheet(); toast("Produit supprimé"); App.renderAll(); };
+  },
+  addProductPrompt(){
+    openSheet(`<h3>Nouveau produit</h3><div class="sub">Il apparaîtra sur les 3 téléphones après synchro.</div>
+      <div class="ed-field"><label>Nom du produit</label><input id="npName" placeholder="ex. KAVRULMUŞ FISTIK" autofocus></div>
+      <div class="ed-field"><label>Prix d'achat (₺/kg) — optionnel</label><input id="npPrice" inputmode="decimal" placeholder="0"></div>
+      <div class="ed-field"><label>Poids d'une unité (kg)</label><input id="npPkg" inputmode="decimal" value="5"></div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="window._npCancel()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._npSave()">Ajouter</button></div>`,false);
+    window._npCancel=closeSheet;
+    window._npSave=()=>{ const nm=document.getElementById("npName").value.trim(); if(!nm){ toast("Indiquez un nom"); return; }
+      const id=uid(); D.products[id]={ id, name:nm, pricePerKg:Math.max(0,parseNum(document.getElementById("npPrice").value)||0),
+        pkgKg:Math.max(0.001,parseNum(document.getElementById("npPkg").value)||5), initialKg:0, order:nextOrder(), updatedAt:now(), deleted:false };
+      markDirty("products",id); save(); closeSheet(); toast("Produit ajouté : "+nm); App.renderAll(); };
+  },
+  changePass(){
+    openSheet(`<h3>Changer le code</h3><div class="sub">Le code reste propre à cet appareil.</div>
+      <div class="ed-field"><label>Code actuel</label><input id="cpOld" inputmode="numeric" type="password"></div>
+      <div class="ed-field"><label>Nouveau code</label><input id="cpNew" inputmode="numeric" type="password"></div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="window._cpCancel()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._cpSave()">Valider</button></div>`,false);
+    window._cpCancel=closeSheet;
+    window._cpSave=()=>{ if(document.getElementById("cpOld").value!==D.settings.adminPass){ toast("Code actuel incorrect"); return; }
+      const nv=document.getElementById("cpNew").value.trim(); if(nv.length<3){ toast("Code trop court"); return; }
+      D.settings.adminPass=nv; save(); closeSheet(); toast("Code modifié"); };
+  },
+  exportJSON(){ const blob=new Blob([JSON.stringify(D,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download="stock_"+todayStr()+".json"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000); toast("Données exportées"); },
+  importJSON(ev){ const f=ev.target.files[0]; if(!f) return; const r=new FileReader();
+    r.onload=()=>{ try{ let obj=JSON.parse(r.result);
+        if(obj.receptions&&!obj.movements) obj=migrateV1(obj); // accepte un ancien export
+        if(!obj.products) throw new Error("format");
+        openSheet(`<h3>Importer ces données ?</h3><div class="sub">${Object.keys(obj.products).length} produits · ${Object.keys(obj.movements||{}).length} mouvements.<br>Remplace les données de cet appareil (puis fusionne à la prochaine synchro).</div>
+          <div class="btn-row"><button class="btn btn-ghost" onclick="window._iC()">Annuler</button>
+          <button class="btn btn-dark" onclick="window._iO()">Remplacer</button></div>`,false);
+        window._iC=()=>{ closeSheet(); ev.target.value=""; };
+        window._iO=()=>{ D=obj; if(!D.settings) D.settings={adminPass:"1234"}; if(!D.movements) D.movements={}; save(); closeSheet(); ev.target.value=""; toast("Données importées"); App.renderAll(); };
+      }catch(e){ toast("Fichier JSON invalide"); ev.target.value=""; } };
+    r.readAsText(f); },
+  resetAll(){
+    openSheet(`<h3>Réinitialiser cet appareil ?</h3><div class="sub">Efface les données locales et restaure les 26 produits. La base en ligne n'est pas effacée : une synchro la re-téléchargera.</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="window._rC()">Annuler</button>
+      <button class="btn btn-danger" onclick="window._rO()">Tout effacer</button></div>`,false);
+    window._rC=closeSheet;
+    window._rO=()=>{ D=freshData(); SC.dirty={products:{},movements:{}}; save(); saveSync(); closeSheet(); toast("Réinitialisé"); App.renderAll(); };
+  }
+};
+
+// ---------- bascule réseau / horloge de synchro ----------
+window.addEventListener("online",()=>{ online=true; setSyncStatus(); syncNow(false); });
+window.addEventListener("offline",()=>{ online=false; setSyncStatus(); });
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) syncTick(); });
+setInterval(syncTick,12000);
+
+// ---------- init ----------
+load();
+document.getElementById("workDate").value=todayStr();
+document.getElementById("repDate").value=todayStr();
+document.getElementById("workDate").addEventListener("change",()=>App.renderGrids());
+window.App=App;
+App.go("in");
+if(SC.url) setTimeout(()=>syncNow(false),600);
+})();
+</script>
+</body>
+</html>
