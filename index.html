@@ -403,7 +403,7 @@ function stockOf(id){ return stockMap()[id]||0; }
 function freshData(){
   const products={};
   DEFAULT_PRODUCTS.forEach((n,i)=>{ const id=uid(); products[id]={id,name:n,pricePerKg:0,pkgKg:5,initialKg:0,order:i,updatedAt:now(),deleted:false}; });
-  return { products, movements:{}, settings:{ adminPass:"1234" } };
+  return { products, movements:{}, settings:{ adminPass:"1234" }, _seed:true };
 }
 
 function migrateV1(v1){
@@ -432,6 +432,7 @@ function load(){
   if(!D || !D.products){ D=freshData(); save(); }
   if(!D.settings) D.settings={adminPass:"1234"};
   if(!D.movements) D.movements={};
+  if(typeof D._seed!=="boolean") D._seed=false; // données existantes = pas un catalogue par défaut vierge
   // garde-fous
   Object.values(D.products).forEach(p=>{ if(typeof p.initialKg!=="number") p.initialKg=0; if(typeof p.pkgKg!=="number") p.pkgKg=5; if(typeof p.pricePerKg!=="number") p.pricePerKg=0; if(typeof p.order!=="number") p.order=0; if(!p.updatedAt) p.updatedAt=now(); });
   // config sync
@@ -442,7 +443,7 @@ function load(){
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(D)); }catch(e){ toast("Erreur d'enregistrement"); } scheduleAutoPush(); }
 function saveSync(){ try{ localStorage.setItem(SYNC_KEY,JSON.stringify(SC)); }catch(e){} }
 
-function markDirty(coll,id){ SC.dirty[coll][id]=true; saveSync(); }
+function markDirty(coll,id){ D._seed=false; SC.dirty[coll][id]=true; saveSync(); }
 function pendingCount(){ return Object.keys(SC.dirty.products).length+Object.keys(SC.dirty.movements).length; }
 
 // écritures modèle
@@ -468,14 +469,9 @@ function historyRows(type,pid){
     const cls=type==="rec"?"in":"out", amt=(type==="rec"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg";
     const detail=type==="rec"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`;
     const when=(r.date===todayStr()?"Aujourd'hui":frDate(r.date))+" · "+hhmm(r.ts);
-    if(App._armed===r.id){
-      return `<div class="logrow armed"><div class="li"><b>Annuler cette saisie&nbsp;?</b><span>${detail} · ${when}</span></div>
-        <button class="undo" onclick="App.doUndoInline('${type}','${r.id}','${pid}')">Confirmer</button>
-        <button class="keepbtn" onclick="App.disarmUndo()">Non</button></div>`;
-    }
     return `<div class="logrow"><div class="li"><b>${detail}</b><span>${when}</span></div>
       <div class="amt ${cls}">${amt}</div>
-      <button class="undo" onclick="App.armUndo('${r.id}')">Annuler</button></div>`;
+      <button class="undo" onclick="App.cancelEntry('${r.id}',true)">Annuler</button></div>`;
   }).join("");
 }
 
@@ -507,6 +503,17 @@ async function syncNow(manual){
     // 1) lire le distant
     const [rp,rm]=await Promise.all([ fetchJSON(ep("products")), fetchJSON(ep("movements")) ]);
     const remoteP=rp||{}, remoteM=rm||{};
+    // 1bis) appareil neuf (catalogue par défaut, jamais modifié) rejoignant une base déjà remplie :
+    //       on ADOPTE les données existantes au lieu de créer des doublons.
+    if(D._seed && Object.keys(remoteP).length>0){
+      D.products=remoteP; D.movements=remoteM; D._seed=false;
+      SC.dirty={products:{},movements:{}};
+      save(); saveSync();
+      SC.lastSync=now(); SC.lastError=""; saveSync();
+      syncing=false; setSyncStatus(); App.renderAll();
+      if(manual) toast("Données récupérées");
+      return;
+    }
     // 2) fusion (le plus récent gagne, par updatedAt) + détermination de ce qu'il faut envoyer
     const toPush={products:[],movements:[]};
     mergeColl("products",remoteP,toPush);
@@ -622,35 +629,66 @@ const App={
   renderLogs(){
     const today=todayStr(), tag=iso=>iso===today?"":`<span class="tag">${frDate(iso)}</span>`;
     const mv=activeMovements();
-    const rec=mv.filter(m=>m.type==="rec").sort((a,b)=>b.ts-a.ts).slice(0,25);
-    const pro=mv.filter(m=>m.type==="pro").sort((a,b)=>b.ts-a.ts).slice(0,25);
-    document.getElementById("logIn").innerHTML=rec.length?rec.map(r=>{ const p=prod(r.productId);
+    const recSince=D.settings.recValidatedUntil||0, proSince=D.settings.proValidatedUntil||0;
+    const rec=mv.filter(m=>m.type==="rec"&&m.ts>recSince).sort((a,b)=>b.ts-a.ts).slice(0,50);
+    const pro=mv.filter(m=>m.type==="pro"&&m.ts>proSince).sort((a,b)=>b.ts-a.ts).slice(0,50);
+    const validBtn=t=>`<button class="btn btn-dark" style="margin-bottom:10px" onclick="App.validateLog('${t}')">✓ Valider la liste</button>`;
+    document.getElementById("logIn").innerHTML=rec.length?(validBtn("rec")+rec.map(r=>{ const p=prod(r.productId);
       return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${r.qty} × ${kg(r.pkgSize)} kg · ${hhmm(r.ts)}</span></div>
-        <div class="amt in">+ ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.undoMovement('${r.id}')">Annuler</button></div>`;
-    }).join(""):`<div class="empty">Aucune réception enregistrée pour le moment.</div>`;
-    document.getElementById("logOut").innerHTML=pro.length?pro.map(r=>{ const p=prod(r.productId);
+        <div class="amt in">+ ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
+    }).join("")):`<div class="empty">Aucune réception à vérifier.</div>`;
+    document.getElementById("logOut").innerHTML=pro.length?(validBtn("pro")+pro.map(r=>{ const p=prod(r.productId);
       return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${r.units} × ${kg(r.kgPerUnit)} kg · ${hhmm(r.ts)}</span></div>
-        <div class="amt out">− ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.undoMovement('${r.id}')">Annuler</button></div>`;
-    }).join(""):`<div class="empty">Aucune production enregistrée pour le moment.</div>`;
+        <div class="amt out">− ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
+    }).join("")):`<div class="empty">Aucune production à vérifier.</div>`;
+  },
+
+  validateLog(type){
+    if(type==="rec") D.settings.recValidatedUntil=now(); else D.settings.proValidatedUntil=now();
+    save(); toast("Liste validée"); this.renderLogs();
   },
 
   // ---------- sélection produit ----------
   pick(id){ if(curTab==="in") this.sheetReception(id); else this.sheetProduction(id); },
 
-  armUndo(id){ this._armed=id; this._refreshHist(); },
-  disarmUndo(){ this._armed=null; this._refreshHist(); },
-  _refreshHist(){ const box=document.getElementById("histBox"); if(box&&this._ctx) box.innerHTML=historyRows(this._ctx.type,this._ctx.pid); },
-  doUndoInline(type,id,pid){ softDeleteMovement(id); this._armed=null; toast("Saisie annulée"); this.renderHeader();
-    if(type==="rec") this.sheetReception(pid); else this.sheetProduction(pid); },
-  undoMovement(id){
+  // ---------- annulation partielle d'une saisie ----------
+  cancelEntry(id, fromSheet){
     const m=D.movements[id]; if(!m) return; const p=prod(m.productId);
     const isRec=m.type==="rec";
-    openSheet(`<h3>Annuler cette saisie ?</h3>
-      <div class="sub">${esc(p?p.name:"")} · ${kg(Math.abs(m.kg))} kg.<br>${isRec?"Ces kilos seront retirés du stock.":"Ces kilos seront remis dans le stock."}</div>
-      <div class="btn-row"><button class="btn btn-ghost" onclick="window._umCancel()">Garder</button>
-      <button class="btn btn-danger" onclick="window._umOk()">Annuler la saisie</button></div>`, !isRec);
-    window._umCancel=closeSheet;
-    window._umOk=()=>{ softDeleteMovement(id); closeSheet(); toast("Saisie annulée"); App.renderAll(); };
+    const per=isRec?m.pkgSize:m.kgPerUnit;          // poids d'un colis/unité
+    const total=isRec?(m.qty||0):(m.units||0);      // nb de colis/unités de la saisie
+    const unitWord=isRec?"colis":"unité(s)";
+    let n=total;                                    // par défaut on annule tout
+    const draw=()=>{ const removedKg=r3(n*per), remainQty=total-n, remainKg=r3(remainQty*per);
+      openSheet(`<h3>Annuler une saisie</h3>
+        <div class="sub">${esc(p?p.name:"")} · saisie de ${total} × ${kg(per)} kg = ${kg(total*per)} kg</div>
+        <div class="field" style="margin-top:0"><label>Quantité à annuler (${unitWord})</label>
+          <div class="stepper"><button class="step-b" onclick="window._ceN(-1)">−</button>
+          <input class="num tnum" id="ceN" inputmode="numeric" value="${n}" oninput="window._ceIn(this.value)">
+          <button class="step-b" onclick="window._ceN(1)">＋</button></div></div>
+        <div class="calc">${isRec?"Retiré du stock":"Remis au stock"}
+          <div class="big ${isRec?'out':'in'} tnum">${kg(removedKg)} kg</div>
+          <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${n===total?"Saisie entièrement annulée":"Saisie ramenée à "+remainQty+" × "+kg(per)+" kg = "+kg(remainKg)+" kg"}</div></div>
+        <div class="btn-row"><button class="btn btn-ghost" onclick="window._ceCancel()">Fermer</button>
+          <button class="btn btn-danger" onclick="window._ceOk()">Confirmer l'annulation</button></div>`, false);
+    };
+    const upd=()=>{ const removedKg=r3(n*per), remainQty=total-n, remainKg=r3(remainQty*per); const c=ovSheet.querySelector(".calc");
+      if(c) c.innerHTML=`${isRec?"Retiré du stock":"Remis au stock"}<div class="big ${isRec?'out':'in'} tnum">${kg(removedKg)} kg</div>
+        <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${n===total?"Saisie entièrement annulée":"Saisie ramenée à "+remainQty+" × "+kg(per)+" kg = "+kg(remainKg)+" kg"}</div>`; };
+    window._ceN=d=>{ n=Math.min(total,Math.max(0,n+d)); document.getElementById("ceN").value=n; upd(); };
+    window._ceIn=v=>{ n=Math.min(total,Math.max(0,Math.floor(parseNum(v)||0))); upd(); };
+    window._ceCancel=()=>{ if(fromSheet){ if(isRec) App.sheetReception(m.productId); else App.sheetProduction(m.productId); } else closeSheet(); };
+    window._ceOk=()=>{
+      if(n<=0){ window._ceCancel(); return; }
+      if(n>=total){ softDeleteMovement(id); }
+      else { const rq=total-n; if(isRec){ m.qty=rq; m.kg=r3(rq*per); } else { m.units=rq; m.kg=r3(-rq*per); } m.updatedAt=now(); markDirty("movements",id); save(); }
+      toast(n>=total?"Saisie annulée":"Saisie corrigée");
+      if(fromSheet){ if(isRec) App.sheetReception(m.productId); else App.sheetProduction(m.productId); }
+      else { closeSheet(); }
+      App.renderHeader();
+      if(curTab==="in"||curTab==="out") App.renderLogs();
+    };
+    draw();
   },
 
   // ========== RÉCEPTION ==========
@@ -815,7 +853,25 @@ const App={
       </div>
       <div class="toggle">Synchronisation automatique
         <div class="sw ${SC.auto?'on':''}" onclick="App.toggleAuto()"><i></i></div></div>
+      <button class="btn btn-danger" style="margin-top:10px" onclick="App.makeAuthoritative()">⚠️ Remplacer la base en ligne par cet appareil</button>
+      <div class="syncsub" style="margin-top:8px">À n'utiliser qu'en cas de doublons : efface la base en ligne et y renvoie uniquement les données de cet appareil.</div>
     </div>`;
+  },
+  makeAuthoritative(){
+    if(!SC.url){ toast("Configurez d'abord l'adresse"); return; }
+    openSheet(`<h3>Remplacer la base en ligne ?</h3>
+      <div class="sub">La base Firebase sera <b>vidée</b> puis remplie avec les données <b>de cet appareil uniquement</b> (${activeProducts().length} produits). Les autres téléphones devront ensuite refaire « Récupérer » (Réinitialiser puis synchroniser). À faire depuis l'appareil qui a les bonnes données.</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="window._maC()">Annuler</button>
+      <button class="btn btn-danger" onclick="window._maO()">Oui, remplacer</button></div>`,false);
+    window._maC=closeSheet;
+    window._maO=async ()=>{ closeSheet();
+      if(syncing) return; syncing=true; D._seed=false; SC.lastError=""; setSyncStatus();
+      try{
+        await putJSON(normUrl(SC.url)+"/.json", { products:D.products, movements:D.movements });
+        SC.dirty={products:{},movements:{}}; SC.lastSync=now(); SC.lastError=""; saveSync(); save();
+        syncing=false; setSyncStatus(); App.renderAll(); toast("Base en ligne remplacée");
+      }catch(e){ syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus(); toast("Échec : "+SC.lastError); }
+    };
   },
   saveSyncUrl(){ const v=document.getElementById("syncUrl").value; SC.url=normUrl(v); SC.lastError=""; saveSync();
     toast(SC.url?"Adresse enregistrée":"Adresse effacée"); this.renderSync(); if(SC.url) syncNow(true); },
@@ -881,7 +937,7 @@ const App={
           <div class="btn-row"><button class="btn btn-ghost" onclick="window._iC()">Annuler</button>
           <button class="btn btn-dark" onclick="window._iO()">Remplacer</button></div>`,false);
         window._iC=()=>{ closeSheet(); ev.target.value=""; };
-        window._iO=()=>{ D=obj; if(!D.settings) D.settings={adminPass:"1234"}; if(!D.movements) D.movements={}; save(); closeSheet(); ev.target.value=""; toast("Données importées"); App.renderAll(); };
+        window._iO=()=>{ D=obj; if(!D.settings) D.settings={adminPass:"1234"}; if(!D.movements) D.movements={}; D._seed=false; save(); closeSheet(); ev.target.value=""; toast("Données importées"); App.renderAll(); };
       }catch(e){ toast("Fichier JSON invalide"); ev.target.value=""; } };
     r.readAsText(f); },
   resetAll(){
