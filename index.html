@@ -109,6 +109,7 @@
   .scard.acc-in{border-top:3px solid var(--in)}
   .scard.acc-out{border-top:3px solid var(--out)}
   .scard.acc-gold{border-top:3px solid var(--gold)}
+  .scard .lbl.plain{text-transform:none;letter-spacing:0;color:var(--ink);font-weight:800;font-size:12.5px;margin-top:3px}
 
   /* ---------- Inventaire ---------- */
   .search{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;font-size:15px;font-family:inherit;margin-bottom:12px;background:var(--card)}
@@ -259,15 +260,16 @@
 
   <!-- ============ PRODUCTION (produits finis, unités) ============ -->
   <section id="scr-out" class="screen screen-out">
-    <div class="seg"><button id="segOutIn" class="on in" onclick="App.setDir('out','in')">📥 Entrée</button><button id="segOutOut" onclick="App.setDir('out','out')">📤 Sortie</button></div>
+    <div class="seg"><button id="segOutIn" class="on in" onclick="App.setDir('out','in')">📥 Entrée</button><button id="segOutOut" onclick="App.setDir('out','out')">📤 Sortie (livreurs)</button></div>
     <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayOut"></span></div>
-    <p class="lead" id="leadOut"></p>
     <div class="summary">
-      <div class="scard" id="fp_c1"><div class="lbl" id="fp_s1l"></div><div class="val tnum" id="fp_s1v">0</div></div>
-      <div class="scard acc-gold"><div class="lbl">Valeur concernée</div><div class="val tnum" id="fp_s2v">0</div></div>
-      <div class="scard acc-gold"><div class="lbl">Produits touchés</div><div class="val tnum" id="fp_s3v">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Entrepôt</div><div class="val tnum" id="poolWhQ">0</div><div class="lbl plain" id="poolWhV">0 ₺</div></div>
+      <div class="scard acc-out"><div class="lbl">🚚 Ayhan</div><div class="val tnum" id="poolAQ">0</div><div class="lbl plain" id="poolAV">0 ₺</div></div>
+      <div class="scard acc-out"><div class="lbl">🚚 Gökhan</div><div class="val tnum" id="poolGQ">0</div><div class="lbl plain" id="poolGV">0 ₺</div></div>
     </div>
-    <div class="section-title">Produits — produits finis</div>
+    <p class="lead" id="leadOut"></p>
+    <div class="seg" id="proDriverSeg" style="display:none"><button id="dvA" onclick="App.setProDriver('ayhan')">🚚 Ayhan</button><button id="dvG" onclick="App.setProDriver('gokhan')">🚚 Gökhan</button></div>
+    <div class="section-title" id="proGridTitle">Produits — produits finis</div>
     <div class="grid" id="gridOut"></div>
     <div class="section-title">Saisies à vérifier</div>
     <div id="logOut"></div>
@@ -403,6 +405,8 @@ const FINI_CATALOG=[
 let D=null, SC=null;
 let unlocked=false, curTab="in";
 let recDir="in", proDir="in", invStock="matiere", repStock="matiere", admStock="matiere";
+let proOutDriver="ayhan";
+const DRIVERS={ayhan:"Ayhan", gokhan:"Gökhan"};
 let online=navigator.onLine, syncing=false, pushDebounce=null;
 
 // ---------- utilitaires ----------
@@ -428,13 +432,22 @@ function isFini(p){ return p&&p.stock==="fini"; }
 function activeProducts(stock){ return Object.values(D.products).filter(p=>!p.deleted&&p.stock===stock).sort((a,b)=>(a.name||"").localeCompare(b.name||"","tr")); }
 function activeMovements(){ return Object.values(D.movements).filter(m=>!m.deleted); }
 function nextOrder(){ let mx=-1; Object.values(D.products).forEach(p=>{ if((p.order||0)>mx) mx=p.order||0; }); return mx+1; }
-function stockMap(){
-  const map={};
-  Object.values(D.products).forEach(p=>{ if(!p.deleted) map[p.id]=(p.stock==="fini"?(p.initialUnits||0):(p.initialKg||0)); });
-  activeMovements().forEach(m=>{ if(map[m.productId]==null) return; map[m.productId]+=(m.stock==="fini"?(m.n||0):(m.kg||0)); });
-  Object.keys(map).forEach(k=>map[k]=r3(map[k]));
-  return map;
+function computeStocks(){
+  const wh={}, veh={ayhan:{},gokhan:{}};
+  Object.values(D.products).forEach(p=>{ if(!p.deleted) wh[p.id]=(p.stock==="fini"?(p.initialUnits||0):(p.initialKg||0)); });
+  activeMovements().forEach(m=>{ const pid=m.productId;
+    if(m.stock!=="fini"){ if(wh[pid]!=null) wh[pid]+=(m.kg||0); return; }
+    if(m.kind==="in"||m.kind==="adj"||m.kind==="out"){ if(wh[pid]!=null) wh[pid]+=(m.n||0); }       // entrepôt (out: n négatif)
+    else if(m.kind==="load"){ if(wh[pid]!=null) wh[pid]-=(m.n||0); const d=m.driver; if(veh[d]) veh[d][pid]=(veh[d][pid]||0)+(m.n||0); } // transfert entrepôt→véhicule
+    else if(m.kind==="vin"){ const d=m.driver; if(veh[d]) veh[d][pid]=(veh[d][pid]||0)+(m.n||0); }   // stock déjà présent (véhicule seul)
+    else if(m.kind==="vout"){ const d=m.driver; if(veh[d]) veh[d][pid]=(veh[d][pid]||0)-(m.n||0); }
+  });
+  Object.keys(wh).forEach(k=>wh[k]=r3(wh[k]));
+  ["ayhan","gokhan"].forEach(d=>Object.keys(veh[d]).forEach(k=>veh[d][k]=r3(veh[d][k])));
+  return {wh,veh};
 }
+function stockMap(){ return computeStocks().wh; }
+function vehStock(driver,id){ const v=computeStocks().veh[driver][id]; return v==null?0:v; }
 function stockOf(id){ const v=stockMap()[id]; return v==null?0:v; }
 function valueOf(p,qty){ return isFini(p)?qty*(p.unitPrice||0):qty*(p.pricePerKg||0); }
 function qLabel(p,qty){ return isFini(p)?(numFR(qty,0)+" u"):(kg(qty)+" kg"); }
@@ -519,6 +532,14 @@ function historyRows(stock,kind,pid){
     const when=(r.date===todayStr()?"Aujourd'hui":frDate(r.date))+" · "+hhmm(r.ts);
     return `<div class="logrow"><div class="li"><b>${detail}</b><span>${when}</span></div>
       <div class="amt ${cls}">${amt}</div><button class="undo" onclick="App.cancelEntry('${r.id}',true)">Annuler</button></div>`;
+  }).join("");
+}
+function historyRowsVeh(driver,pid){
+  const list=activeMovements().filter(m=>m.stock==="fini"&&(m.kind==="load"||m.kind==="vin")&&m.driver===driver&&m.productId===pid).sort((a,b)=>b.ts-a.ts).slice(0,6);
+  if(!list.length) return `<div class="empty" style="padding:14px">Aucun chargement pour ce produit.</div>`;
+  return list.map(r=>{ const when=(r.date===todayStr()?"Aujourd'hui":frDate(r.date))+" · "+hhmm(r.ts);
+    return `<div class="logrow"><div class="li"><b>${Math.abs(r.n)} unité(s)</b><span>${r.kind==="vin"?"déjà présent":"chargé depuis l'entrepôt"} · ${when}</span></div>
+      <div class="amt out">+ ${Math.abs(r.n)} u</div><button class="undo" onclick="App.cancelEntry('${r.id}',true)">Annuler</button></div>`;
   }).join("");
 }
 
@@ -615,7 +636,11 @@ const App={
     document.getElementById(tab==="in"?"segInOut":"segOutOut").className=(dir==="out"?"on out":"");
     document.body.classList.toggle("screen-in",dir==="in"); document.body.classList.toggle("screen-out",dir==="out");
     const badge=document.getElementById("modeBadge"); badge.className="h-mode "+(dir==="in"?"in":"out");
+    if(tab==="out") document.getElementById("proDriverSeg").style.display=(dir==="out"?"flex":"none");
     if(tab==="in") this.renderRec(); else this.renderPro(); },
+  setProDriver(d){ proOutDriver=d;
+    document.getElementById("dvA").className=(d==="ayhan"?"on out":""); document.getElementById("dvG").className=(d==="gokhan"?"on out":"");
+    this.renderPro(); },
   setInvStock(s){ invStock=s; document.getElementById("segInvM").className=(s==="matiere"?"on neutral":""); document.getElementById("segInvF").className=(s==="fini"?"on neutral":""); this.renderHeader(); this.renderInv(); },
   setRepStock(s){ repStock=s; document.getElementById("segRepM").className=(s==="matiere"?"on neutral":""); document.getElementById("segRepF").className=(s==="fini"?"on neutral":""); this.renderHeader(); this.renderRep(); },
   setAdmStock(s){ admStock=s; document.getElementById("segAdmM").className=(s==="matiere"?"on neutral":""); document.getElementById("segAdmF").className=(s==="fini"?"on neutral":""); this.renderAdmin(); },
@@ -643,39 +668,54 @@ const App={
   },
   pick(id){ const p=prod(id); if(!p) return;
     if(p.stock==="matiere"){ if(recDir==="in") this.sheetMatiereIn(id); else this.sheetMatiereOut(id); }
-    else { if(proDir==="in") this.sheetFiniIn(id); else this.sheetFiniOut(id); } },
+    else { this.sheetFiniIn(id); } },
+  pickVehicle(driver,id){ this.sheetVehicleLoad(driver,id); },
 
-  // ---------- PRODUCTION (produits finis) ----------
+  // ---------- PRODUCTION (produits finis + véhicules) ----------
   renderPro(){
-    const date=document.getElementById("workDate").value||todayStr(), mv=activeMovements(), sm=stockMap();
-    const dayMv=mv.filter(m=>m.stock==="fini"&&m.kind===proDir&&m.date===date);
-    const sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
-    document.getElementById("fp_c1").className="scard acc-"+(proDir==="in"?"in":"out");
-    document.getElementById("fp_s1l").textContent=proDir==="in"?"Entrées du jour":"Sorties du jour";
-    document.getElementById("fp_s1v").innerHTML=Math.abs(sum(dayMv,m=>m.n||0))+"<small> u</small>";
-    let val=0; dayMv.forEach(m=>{ const p=prod(m.productId); if(p) val+=Math.abs(m.n||0)*(p.unitPrice||0); });
-    document.getElementById("fp_s2v").innerHTML=numFR(val,0)+"<small> ₺</small>";
-    document.getElementById("fp_s3v").textContent=new Set(dayMv.map(m=>m.productId)).size;
-    document.getElementById("leadOut").textContent=proDir==="in"
-      ?"Ajout de produits finis au stock (fabrication / emballage)."
-      :"Sortie de produits finis (ventes / expéditions).";
-    const tile=p=>{ const s=sm[p.id]||0; let cls="ok",txt=numFR(s,0)+" u"; if(s<=0){cls="empty";txt="Rupture";} else if(s<5){cls="low";}
-      return `<button class="pbtn" onclick="App.pick('${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
-    document.getElementById("gridOut").innerHTML=activeProducts("fini").map(tile).join("")+
-      `<button class="pbtn add" onclick="App.addProductPrompt()"><span class="plus">＋</span>Ajouter un produit</button>`;
-    this.renderLogs("fini",proDir,"logOut");
+    const STK=computeStocks(), wh=STK.wh, veh=STK.veh, fp=activeProducts("fini");
+    let whQ=0,whV=0,aQ=0,aV=0,gQ=0,gV=0;
+    fp.forEach(p=>{ const w=wh[p.id]||0,a=veh.ayhan[p.id]||0,g=veh.gokhan[p.id]||0,u=p.unitPrice||0;
+      whQ+=w; whV+=w*u; aQ+=a; aV+=a*u; gQ+=g; gV+=g*u; });
+    document.getElementById("poolWhQ").innerHTML=numFR(whQ,0)+"<small> u</small>";
+    document.getElementById("poolWhV").textContent=money(whV);
+    document.getElementById("poolAQ").innerHTML=numFR(aQ,0)+"<small> u</small>"; document.getElementById("poolAV").textContent=money(aV);
+    document.getElementById("poolGQ").innerHTML=numFR(gQ,0)+"<small> u</small>"; document.getElementById("poolGV").textContent=money(gV);
+
+    if(proDir==="in"){
+      document.getElementById("proDriverSeg").style.display="none";
+      document.getElementById("proGridTitle").textContent="Produits — ajout à l'entrepôt";
+      document.getElementById("leadOut").textContent="Ajout de produits finis à l'entrepôt (fabrication / emballage).";
+      const tile=p=>{ const s=wh[p.id]||0; let cls="ok",txt=numFR(s,0)+" u"; if(s<=0){cls="empty";txt="Rupture";} else if(s<5){cls="low";}
+        return `<button class="pbtn" onclick="App.pick('${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
+      document.getElementById("gridOut").innerHTML=fp.map(tile).join("")+`<button class="pbtn add" onclick="App.addProductPrompt()"><span class="plus">＋</span>Ajouter un produit</button>`;
+      this.renderLogs("fini","in","logOut");
+    } else {
+      document.getElementById("proDriverSeg").style.display="flex";
+      document.getElementById("dvA").className=(proOutDriver==="ayhan"?"on out":""); document.getElementById("dvG").className=(proOutDriver==="gokhan"?"on out":"");
+      const dv=veh[proOutDriver];
+      document.getElementById("proGridTitle").textContent="Charger le véhicule — "+DRIVERS[proOutDriver];
+      document.getElementById("leadOut").textContent="Touchez un produit pour charger le véhicule de "+DRIVERS[proOutDriver]+" (la marchandise sort de l'entrepôt).";
+      const tile=p=>{ const s=dv[p.id]||0; let cls="ok",txt=numFR(s,0)+" u"; if(s<=0){cls="empty";txt="0 u";}
+        return `<button class="pbtn" onclick="App.pickVehicle('${proOutDriver}','${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
+      document.getElementById("gridOut").innerHTML=fp.map(tile).join("");
+      this.renderLogs("fini","out","logOut");
+    }
   },
 
   renderLogs(stock,dir,elId){
     const since=(D.settings.validUntil[stock+"_"+dir])||0;
-    const list=activeMovements().filter(m=>m.stock===stock&&m.kind===dir&&m.ts>since).sort((a,b)=>b.ts-a.ts).slice(0,50);
+    const kinds=stock==="matiere"?[dir==="in"?"in":"out"]:(dir==="in"?["in"]:["load","vin"]);
+    const list=activeMovements().filter(m=>m.stock===stock&&kinds.indexOf(m.kind)>=0&&m.ts>since).sort((a,b)=>b.ts-a.ts).slice(0,50);
     const today=todayStr(), tag=iso=>iso===today?"":`<span class="tag">${frDate(iso)}</span>`;
     const validBtn=`<button class="btn btn-dark" style="margin-bottom:10px" onclick="App.validateLog('${stock}','${dir}')">✓ Valider la liste</button>`;
     document.getElementById(elId).innerHTML=list.length?(validBtn+list.map(r=>{ const p=prod(r.productId);
-      const det=stock==="matiere"?(dir==="in"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`):`${Math.abs(r.n)} unité(s)`;
-      const amt=stock==="matiere"?((dir==="in"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg"):((dir==="in"?"+ ":"− ")+Math.abs(r.n)+" u");
+      let det,amt,cls;
+      if(stock==="matiere"){ det=dir==="in"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`; amt=(dir==="in"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg"; cls=dir==="in"?"in":"out"; }
+      else if(dir==="in"){ det=`${Math.abs(r.n)} unité(s)`; amt="+ "+Math.abs(r.n)+" u"; cls="in"; }
+      else { det=`🚚 ${DRIVERS[r.driver]||"?"} · ${r.kind==="vin"?"déjà présent":"chargé"}`; amt="− "+Math.abs(r.n)+" u"; cls="out"; }
       return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${det} · ${hhmm(r.ts)}</span></div>
-        <div class="amt ${dir==="in"?"in":"out"}">${amt}</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
+        <div class="amt ${cls}">${amt}</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
     }).join("")):`<div class="empty">Aucune saisie à vérifier.</div>`;
   },
   validateLog(stock,dir){ D.settings.validUntil[stock+"_"+dir]=now(); save(); toast("Liste validée");
@@ -684,36 +724,41 @@ const App={
   // ---------- annulation partielle ----------
   cancelEntry(id,fromSheet){
     const m=D.movements[id]; if(!m) return; const p=prod(m.productId);
-    const fini=m.stock==="fini", isIn=m.kind==="in";
-    const total=fini?Math.abs(m.n):(isIn?(m.qty||0):(m.units||0));
-    const per=fini?1:(isIn?m.pkgSize:m.kgPerUnit);
-    const word=fini?"unité(s)":(isIn?"colis":"unité(s)");
+    const fini=m.stock==="fini";
+    const addLike=(m.kind==="in"||m.kind==="load"||m.kind==="vin");
+    const total=fini?Math.abs(m.n):(m.kind==="in"?(m.qty||0):(m.units||0));
+    const per=fini?1:(m.kind==="in"?m.pkgSize:m.kgPerUnit);
+    const word=fini?"unité(s)":(m.kind==="in"?"colis":"unité(s)");
+    const lab=addLike?"Retiré":"Remis";
     let n=total;
-    const txt=(rem)=>{ if(fini){ return n===total?"Saisie entièrement annulée":("Saisie ramenée à "+(total-n)+" unité(s)"); }
-      return n===total?"Saisie entièrement annulée":("Saisie ramenée à "+(total-n)+" × "+kg(per)+" kg"); };
     const big=()=>fini?(numFR(n,0)+" u"):(kg(r3(n*per))+" kg");
-    const sub=()=>fini?`${esc(p?p.name:"")} · saisie de ${total} unité(s)` : `${esc(p?p.name:"")} · saisie de ${total} × ${kg(per)} kg`;
+    const txt=()=>{ if(n===total) return "Saisie entièrement annulée";
+      return fini?("Saisie ramenée à "+(total-n)+" unité(s)"):("Saisie ramenée à "+(total-n)+" × "+kg(per)+" kg"); };
+    const sub=()=>{ if(fini && (m.kind==="load"||m.kind==="vin")) return `${esc(p?p.name:"")} · 🚚 ${DRIVERS[m.driver]||"?"} · ${total} unité(s)`;
+      return fini?`${esc(p?p.name:"")} · ${total} unité(s)`:`${esc(p?p.name:"")} · ${total} × ${kg(per)} kg`; };
+    const reopen=()=>{ if(m.stock==="matiere"){ if(m.kind==="in") App.sheetMatiereIn(m.productId); else App.sheetMatiereOut(m.productId); }
+      else if(m.kind==="load"||m.kind==="vin"){ App.sheetVehicleLoad(m.driver,m.productId); } else App.sheetFiniIn(m.productId); };
     const draw=()=>{ openSheet(`<h3>Annuler une saisie</h3><div class="sub">${sub()}</div>
         <div class="field" style="margin-top:0"><label>Quantité à annuler (${word})</label>
           <div class="stepper"><button class="step-b" onclick="window._ceN(-1)">−</button>
           <input class="num tnum" id="ceN" inputmode="numeric" value="${n}" oninput="window._ceIn(this.value)">
           <button class="step-b" onclick="window._ceN(1)">＋</button></div></div>
-        <div class="calc">${isIn?"Retiré du stock":"Remis au stock"}<div class="big ${isIn?'out':'in'} tnum">${big()}</div>
-          <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${txt()}</div></div>
+        <div class="calc">${lab}<div class="big ${addLike?'out':'in'} tnum">${big()}</div>
+          <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${txt()}${m.kind==="load"?" · remis à l'entrepôt":""}</div></div>
         <div class="btn-row"><button class="btn btn-ghost" onclick="window._ceCancel()">Fermer</button>
           <button class="btn btn-danger" onclick="window._ceOk()">Confirmer l'annulation</button></div>`, false); };
-    const upd=()=>{ const c=ovSheet.querySelector(".calc"); if(c) c.innerHTML=`${isIn?"Retiré du stock":"Remis au stock"}<div class="big ${isIn?'out':'in'} tnum">${big()}</div>
-        <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${txt()}</div>`; };
+    const upd=()=>{ const c=ovSheet.querySelector(".calc"); if(c) c.innerHTML=`${lab}<div class="big ${addLike?'out':'in'} tnum">${big()}</div>
+        <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${txt()}${m.kind==="load"?" · remis à l'entrepôt":""}</div>`; };
     window._ceN=d=>{ n=Math.min(total,Math.max(0,n+d)); document.getElementById("ceN").value=n; upd(); };
     window._ceIn=v=>{ n=Math.min(total,Math.max(0,Math.floor(parseNum(v)||0))); upd(); };
-    window._ceCancel=()=>{ if(fromSheet) openSheetFor(m.stock,m.kind,m.productId); else closeSheet(); };
+    window._ceCancel=()=>{ if(fromSheet) reopen(); else closeSheet(); };
     window._ceOk=()=>{ if(n<=0){ window._ceCancel(); return; }
       if(n>=total){ softDeleteMovement(id); }
       else { const rq=total-n;
-        if(fini){ m.n=(isIn?rq:-rq); } else if(isIn){ m.qty=rq; m.kg=r3(rq*per); } else { m.units=rq; m.kg=r3(-rq*per); }
+        if(fini){ m.n=(m.n>=0?1:-1)*rq; } else if(m.kind==="in"){ m.qty=rq; m.kg=r3(rq*per); } else { m.units=rq; m.kg=r3(-rq*per); }
         m.updatedAt=now(); markDirty("movements",id); save(); }
       toast(n>=total?"Saisie annulée":"Saisie corrigée");
-      if(fromSheet) openSheetFor(m.stock,m.kind,m.productId); else closeSheet();
+      if(fromSheet) reopen(); else closeSheet();
       App.renderHeader(); if(curTab==="in") App.renderRec(); else if(curTab==="out") App.renderPro(); };
     draw();
   },
@@ -807,7 +852,37 @@ const App={
     render();
   },
 
-  // ---------- INVENTAIRE ----------
+  // ========== Chargement véhicule (Sortie Production) ==========
+  sheetVehicleLoad(driver,id){
+    const p=prod(id); const st={units:1};
+    const render=()=>{ const wh=stockOf(id), vc=vehStock(driver,id), whAfter=wh-st.units, vcAfter=vc+st.units;
+      openSheet(`<h3>${esc(p.name)}</h3><div class="sub">🚚 ${DRIVERS[driver]} · dans le véhicule ${numFR(vc,0)} u · entrepôt ${numFR(wh,0)} u</div>
+        <div class="field" style="margin-top:0"><label>Quantité (unités)</label>
+          <div class="stepper"><button class="step-b" onclick="window._u(-1)">−</button>
+          <input class="num tnum" id="u" inputmode="numeric" value="${st.units}" oninput="window._ui(this.value)">
+          <button class="step-b" onclick="window._u(1)">＋</button></div></div>
+        <div class="calc">Chargement<div class="big out tnum">+ ${numFR(st.units,0)} u</div>
+          <div style="font-size:12.5px;margin-top:4px;color:${whAfter<0?'var(--warn)':'var(--muted)'}">Véhicule → ${numFR(vcAfter,0)} u · entrepôt → ${numFR(whAfter,0)} u ${whAfter<0?'⚠️ entrepôt négatif':''}</div></div>
+        <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Fermer</button>
+          <button class="btn btn-out" onclick="window._load()">Charger (sort de l'entrepôt)</button></div>
+        <button class="btn btn-ghost" style="margin-top:10px" onclick="window._init()">📦 Déjà présent dans le véhicule</button>
+        <div class="syncsub" style="margin-top:6px">« Charger » déduit de l'entrepôt. « Déjà présent » ajoute au véhicule sans toucher l'entrepôt (stock initial).</div>
+        <div class="section-title" style="margin-top:18px">Derniers chargements</div>
+        <div id="histBox">${historyRowsVeh(driver,id)}</div>`, true); };
+    const upd=()=>{ const wh=stockOf(id), vc=vehStock(driver,id), whAfter=wh-st.units, vcAfter=vc+st.units; const c=ovSheet.querySelector(".calc");
+      if(c) c.innerHTML=`Chargement<div class="big out tnum">+ ${numFR(st.units,0)} u</div><div style="font-size:12.5px;margin-top:4px;color:${whAfter<0?'var(--warn)':'var(--muted)'}">Véhicule → ${numFR(vcAfter,0)} u · entrepôt → ${numFR(whAfter,0)} u ${whAfter<0?'⚠️ entrepôt négatif':''}</div>`; };
+    window._u=d=>{ st.units=Math.max(1,(st.units||0)+d); render(); };
+    window._ui=v=>{ st.units=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
+    window._load=()=>{ if(!st.units||st.units<=0){ toast("Quantité invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr();
+      pushMovement({stock:"fini",kind:"load",productId:id,driver,n:st.units,date});
+      closeSheet(); toast("Chargé : "+numFR(st.units,0)+" u → "+DRIVERS[driver]); App.renderAll(); };
+    window._init=()=>{ if(!st.units||st.units<=0){ toast("Quantité invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr();
+      pushMovement({stock:"fini",kind:"vin",productId:id,driver,n:st.units,date});
+      closeSheet(); toast("Ajouté au véhicule : "+numFR(st.units,0)+" u"); App.renderAll(); };
+    render();
+  },
   renderInv(){
     const st=invStock, fini=st==="fini", q=(document.getElementById("invSearch").value||"").toLocaleLowerCase("tr");
     const sm=stockMap(); let totQ=0,totVal=0,empty=0;
@@ -830,10 +905,14 @@ const App={
   // ---------- RAPPORT ----------
   renderRep(){
     const st=repStock, fini=st==="fini", dEl=document.getElementById("repDate"); if(!dEl.value) dEl.value=todayStr(); const date=dEl.value;
-    document.getElementById("leadRep").textContent=(fini?"Produits finis":"Matières premières")+" — variation du jour, uniquement les produits ayant bougé.";
+    document.getElementById("leadRep").textContent=(fini?"Produits finis (entrepôt)":"Matières premières")+" — variation du jour, uniquement les produits ayant bougé.";
     const mv=activeMovements().filter(m=>m.stock===st&&m.date===date);
-    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; const v=fini?Math.abs(m.n):Math.abs(m.kg);
-      if(m.kind==="in") e.in+=v; else if(m.kind==="out") e.out+=v; else { if((fini?m.n:m.kg)>=0) e.in+=v; else e.out+=v; } });
+    const map={}; mv.forEach(m=>{ let din=0,dout=0;
+      if(fini){ const v=Math.abs(m.n);
+        if(m.kind==="in") din=v; else if(m.kind==="out"||m.kind==="load") dout=v;
+        else if(m.kind==="adj"){ if(m.n>=0) din=v; else dout=v; } else return; }
+      else { const v=Math.abs(m.kg); if(m.kg>=0) din=v; else dout=v; }
+      const e=map[m.productId]=map[m.productId]||{in:0,out:0}; e.in+=din; e.out+=dout; });
     const ids=Object.keys(map); let tIn=0,tOut=0; ids.forEach(id=>{ tIn+=map[id].in; tOut+=map[id].out; });
     const u=fini?" u":" kg", fmt=v=>fini?numFR(v,0):kg(v);
     document.getElementById("repIn").innerHTML=fmt(tIn)+"<small>"+u+"</small>";
@@ -851,8 +930,12 @@ const App={
   printReport(){
     const st=repStock, fini=st==="fini", date=document.getElementById("repDate").value||todayStr();
     const mv=activeMovements().filter(m=>m.stock===st&&m.date===date);
-    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; const v=fini?Math.abs(m.n):Math.abs(m.kg);
-      if(m.kind==="in") e.in+=v; else if(m.kind==="out") e.out+=v; else { if((fini?m.n:m.kg)>=0) e.in+=v; else e.out+=v; } });
+    const map={}; mv.forEach(m=>{ let din=0,dout=0;
+      if(fini){ const v=Math.abs(m.n);
+        if(m.kind==="in") din=v; else if(m.kind==="out"||m.kind==="load") dout=v;
+        else if(m.kind==="adj"){ if(m.n>=0) din=v; else dout=v; } else return; }
+      else { const v=Math.abs(m.kg); if(m.kg>=0) din=v; else dout=v; }
+      const e=map[m.productId]=map[m.productId]||{in:0,out:0}; e.in+=din; e.out+=dout; });
     const fmt=v=>fini?numFR(v,0):kg(v), un=fini?"unités":"kg";
     let body=Object.keys(map).map(id=>{ const p=prod(id), m=map[id], n=m.in-m.out;
       return `<tr><td>${esc(p?p.name:id)}</td><td style="text-align:right;color:#2c6">${m.in?"+"+fmt(m.in):"—"}</td><td style="text-align:right;color:#a42">${m.out?"−"+fmt(m.out):"—"}</td><td style="text-align:right;font-weight:700">${n>=0?"+":"−"}${fmt(Math.abs(n))}</td></tr>`; }).join("");
