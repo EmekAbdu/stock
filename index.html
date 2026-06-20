@@ -216,8 +216,15 @@
   .sw.on{background:var(--in)}
   .sw i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
   .sw.on i{left:23px}
+
+  /* ---------- Bascule segmentée (Entrée/Sortie, Matières/Finis) ---------- */
+  .seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px;box-shadow:var(--shadow)}
+  .seg button{flex:1;border:none;background:transparent;border-radius:9px;padding:11px 8px;font-size:14px;font-weight:800;font-family:inherit;color:var(--muted);cursor:pointer;letter-spacing:.3px}
+  .seg button.on{color:#fff}
+  .seg button.on.in{background:var(--in)}
+  .seg button.on.out{background:var(--out)}
+  .seg button.on.neutral{background:var(--bg)}
 </style>
-</head>
 <body class="screen-in">
 
 <header>
@@ -227,50 +234,53 @@
   </div>
   <div class="h-meta">
     <div>Date <input type="date" id="workDate" class="h-date"></div>
-    <div>Stock total <b id="hTotalKg">0 kg</b></div>
+    <div id="hTot1">Stock <b id="hTotalKg">0</b></div>
     <div>Valeur <b id="hTotalVal">0 ₺</b></div>
     <div id="hSync" style="cursor:pointer" onclick="App.go('adm')">Synchro <b id="hSyncState">hors-ligne</b></div>
   </div>
 </header>
 
 <main>
-  <!-- ============ RÉCEPTION ============ -->
+  <!-- ============ RÉCEPTION (matières premières, kg) ============ -->
   <section id="scr-in" class="screen active screen-in">
+    <div class="seg"><button id="segInIn" class="on in" onclick="App.setDir('in','in')">📥 Entrée</button><button id="segInOut" onclick="App.setDir('in','out')">📤 Sortie</button></div>
     <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayIn"></span></div>
-    <p class="lead">Sélectionnez un produit livré, puis le format du colis et la quantité reçue.</p>
+    <p class="lead" id="leadIn"></p>
     <div class="summary">
-      <div class="scard acc-in"><div class="lbl">Entrées du jour</div><div class="val tnum" id="inKgDay">0<small> kg</small></div></div>
-      <div class="scard acc-in"><div class="lbl">Colis reçus</div><div class="val tnum" id="inPkgDay">0</div></div>
-      <div class="scard acc-gold"><div class="lbl">Produits touchés</div><div class="val tnum" id="inProdDay">0</div></div>
+      <div class="scard" id="mr_c1"><div class="lbl" id="mr_s1l"></div><div class="val tnum" id="mr_s1v">0</div></div>
+      <div class="scard" id="mr_c2"><div class="lbl" id="mr_s2l"></div><div class="val tnum" id="mr_s2v">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Produits touchés</div><div class="val tnum" id="mr_s3v">0</div></div>
     </div>
-    <div class="section-title">Produits</div>
+    <div class="section-title">Produits — matières premières</div>
     <div class="grid" id="gridIn"></div>
-    <div class="section-title">Saisies de la journée</div>
+    <div class="section-title">Saisies à vérifier</div>
     <div id="logIn"></div>
   </section>
 
-  <!-- ============ PRODUCTION ============ -->
+  <!-- ============ PRODUCTION (produits finis, unités) ============ -->
   <section id="scr-out" class="screen screen-out">
+    <div class="seg"><button id="segOutIn" class="on in" onclick="App.setDir('out','in')">📥 Entrée</button><button id="segOutOut" onclick="App.setDir('out','out')">📤 Sortie</button></div>
     <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayOut"></span></div>
-    <p class="lead">Pointez les produits pris en production. Chaque unité (colis / pochette) déduit son poids du stock.</p>
+    <p class="lead" id="leadOut"></p>
     <div class="summary">
-      <div class="scard acc-out"><div class="lbl">Sorties du jour</div><div class="val tnum" id="outKgDay">0<small> kg</small></div></div>
-      <div class="scard acc-out"><div class="lbl">Unités prélevées</div><div class="val tnum" id="outPkgDay">0</div></div>
-      <div class="scard acc-gold"><div class="lbl">Produits touchés</div><div class="val tnum" id="outProdDay">0</div></div>
+      <div class="scard" id="fp_c1"><div class="lbl" id="fp_s1l"></div><div class="val tnum" id="fp_s1v">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Valeur concernée</div><div class="val tnum" id="fp_s2v">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Produits touchés</div><div class="val tnum" id="fp_s3v">0</div></div>
     </div>
-    <div class="section-title">Produits</div>
+    <div class="section-title">Produits — produits finis</div>
     <div class="grid" id="gridOut"></div>
-    <div class="section-title">Saisies de la journée</div>
+    <div class="section-title">Saisies à vérifier</div>
     <div id="logOut"></div>
   </section>
 
   <!-- ============ INVENTAIRE ============ -->
   <section id="scr-inv" class="screen">
+    <div class="seg"><button id="segInvM" class="on neutral" onclick="App.setInvStock('matiere')">Matières</button><button id="segInvF" onclick="App.setInvStock('fini')">Produits finis</button></div>
     <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayInv"></span></div>
-    <p class="lead">Quantités et valeurs en stock. La valeur utilise le prix d'achat au kilo.</p>
+    <p class="lead" id="leadInv"></p>
     <div class="summary">
-      <div class="scard acc-gold"><div class="lbl">Stock total</div><div class="val tnum" id="invTotalKg">0<small> kg</small></div></div>
-      <div class="scard acc-gold"><div class="lbl">Valeur totale</div><div class="val tnum" id="invTotalVal">0<small> ₺</small></div></div>
+      <div class="scard acc-gold"><div class="lbl" id="inv_s1l">Stock total</div><div class="val tnum" id="invTotalKg">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Valeur totale</div><div class="val tnum" id="invTotalVal">0</div></div>
       <div class="scard acc-out"><div class="lbl">Ruptures</div><div class="val tnum" id="invEmpty">0</div></div>
     </div>
     <div class="section-title">Détail par produit</div>
@@ -280,17 +290,17 @@
 
   <!-- ============ RAPPORT ============ -->
   <section id="scr-rep" class="screen">
+    <div class="seg"><button id="segRepM" class="on neutral" onclick="App.setRepStock('matiere')">Matières</button><button id="segRepF" onclick="App.setRepStock('fini')">Produits finis</button></div>
     <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayRep"></span></div>
-    <div id="repNotice"></div>
-    <p class="lead">Variation du stock pour une journée — uniquement les produits ayant eu un mouvement.</p>
+    <p class="lead" id="leadRep">Variation du stock pour une journée — uniquement les produits ayant eu un mouvement.</p>
     <div class="field" style="margin-top:0">
       <label>Journée du rapport</label>
       <input type="date" id="repDate" class="num" style="text-align:left" onchange="App.renderRep()">
     </div>
     <div class="summary" style="margin-top:14px">
-      <div class="scard acc-in"><div class="lbl">Total entrées</div><div class="val tnum" id="repIn">0<small> kg</small></div></div>
-      <div class="scard acc-out"><div class="lbl">Total sorties</div><div class="val tnum" id="repOut">0<small> kg</small></div></div>
-      <div class="scard acc-gold"><div class="lbl">Variation nette</div><div class="val tnum" id="repNet">0<small> kg</small></div></div>
+      <div class="scard acc-in"><div class="lbl">Total entrées</div><div class="val tnum" id="repIn">0</div></div>
+      <div class="scard acc-out"><div class="lbl">Total sorties</div><div class="val tnum" id="repOut">0</div></div>
+      <div class="scard acc-gold"><div class="lbl">Variation nette</div><div class="val tnum" id="repNet">0</div></div>
     </div>
     <div class="section-title">Mouvements de la journée</div>
     <div id="repList"></div>
@@ -303,7 +313,7 @@
   <section id="scr-adm" class="screen">
     <div id="admGate" class="gate">
       <div class="lock">🔒</div>
-      <p class="lead" style="margin-top:8px">Espace interne protégé — prix d'achat, produits et données.</p>
+      <p class="lead" style="margin-top:8px">Espace interne protégé — prix, produits et données.</p>
       <div class="field" style="max-width:240px;margin:0 auto">
         <input type="password" id="admPass" class="num" inputmode="numeric" placeholder="••••">
       </div>
@@ -314,8 +324,9 @@
 
     <div id="admPanel" style="display:none">
       <div class="daychip"><span class="cal">📅</span><span class="lbl">Aujourd'hui</span> <span id="dayAdm"></span></div>
-      <div class="section-title" style="margin-top:4px">Produits & prix d'achat (₺/kg)</div>
-      <p class="lead" style="margin-top:0">Le prix au kilo sert au calcul des valeurs. Le « format » est le poids d'une unité utilisée en production.</p>
+
+      <div class="seg"><button id="segAdmM" class="on neutral" onclick="App.setAdmStock('matiere')">Matières premières</button><button id="segAdmF" onclick="App.setAdmStock('fini')">Produits finis</button></div>
+      <p class="lead" id="leadAdm" style="margin-top:0"></p>
       <div id="admList"></div>
       <button class="btn btn-ghost" style="margin-top:6px" onclick="App.addProductPrompt()">＋ Ajouter un produit</button>
 
@@ -334,24 +345,21 @@
         <button class="btn btn-ghost" onclick="App.changePass()">Changer le code</button>
         <button class="btn btn-danger" onclick="App.resetAll()">Réinitialiser</button>
       </div>
-      <p class="lead" style="margin-top:20px;text-align:center">Gestion de Stock · fonctionne hors-ligne · données enregistrées sur cet appareil.</p>
+      <p class="lead" style="margin-top:20px;text-align:center">Gestion de Stock · fonctionne hors-ligne · synchro Firebase.</p>
     </div>
   </section>
 </main>
 
-<!-- Overlay générique -->
 <div class="ov" id="ov"><div class="sheet" id="ovSheet"></div></div>
-
 <div id="toast"></div>
 
 <nav>
-  <button class="nav-b on in" data-tab="in" onclick="App.go('in')"><span class="ni">📥</span><span class="nl">Réception</span></button>
-  <button class="nav-b" data-tab="out" onclick="App.go('out')"><span class="ni">📤</span><span class="nl">Production</span></button>
+  <button class="nav-b on in" data-tab="in" onclick="App.go('in')"><span class="ni">🧺</span><span class="nl">Réception</span></button>
+  <button class="nav-b" data-tab="out" onclick="App.go('out')"><span class="ni">🏷️</span><span class="nl">Production</span></button>
   <button class="nav-b" data-tab="inv" onclick="App.go('inv')"><span class="ni">📦</span><span class="nl">Inventaire</span></button>
   <button class="nav-b" data-tab="rep" onclick="App.go('rep')"><span class="ni">📊</span><span class="nl">Rapport</span></button>
   <button class="nav-b" data-tab="adm" onclick="App.go('adm')"><span class="ni">⚙️</span><span class="nl">Admin</span></button>
 </nav>
-
 <script>
 "use strict";
 (function(){
@@ -366,9 +374,35 @@ const DEFAULT_PRODUCTS=[
   "TUZLU LEBLEBİ","TUZSUZ SİYAH ÇEKİRDEK","ÜZÜM"
 ];
 
-let D=null;          // {products:{id:{...}}, movements:{id:{...}}, settings:{...}}
-let SC=null;         // config sync local (NON synchronisée)
+// Catalogue Produits finis (depuis l'Excel) — id stable f1..f54 (anti-doublon multi-appareils)
+const FINI_CATALOG=[
+  {name:"ANTEP FISTIĞI 250 g",price:350},{name:"ANTEP FISTIĞI DP 70 g",price:100},
+  {name:"BADEM 250 g",price:180},{name:"BADEM DP 70 g",price:60},{name:"BADEM DRAJE 150 g",price:52.5},
+  {name:"BAHARATLI ÇEKİRDEK 100 g",price:26},{name:"BEYAZ NOHUT 120 g",price:32},
+  {name:"ÇAKIL TAŞI 140 g",price:25},{name:"ÇAKIL TAŞI DRAJE 140 g",price:25},
+  {name:"ÇEKİRDEK 120 g",price:26},{name:"ÇEKİRDEK 300 g",price:54},{name:"ÇEKİRDEK 320 g",price:53},
+  {name:"ÇEKİRDEK 5 kg",price:700},{name:"ÇEKİRDEK 500 g",price:87.5},{name:"ÇITIR LEBLEBİ 120 g",price:20},
+  {name:"EKONOMİK KARIŞIK 160 g",price:39},{name:"EXTRA KARIŞIK 160 g",price:78},
+  {name:"FINDIK 250 g",price:350},{name:"FINDIK DP 70 g",price:100},
+  {name:"KABAK ÇEKİRDEĞİ 150 g",price:85},{name:"KABAK ÇEKİRDEĞİ 70 g",price:45},
+  {name:"KABUKLU FISTIK 110 g",price:18.5},{name:"KABUKLU FISTIK 500 g",price:80},{name:"KABUKLU FISTIK TUZSUZ 110 g",price:18},
+  {name:"KAJU 250 g",price:160},{name:"KAJU DP 70 g",price:55},
+  {name:"KASE FISTIK 150 g",price:53},{name:"KASE FISTIK 200 g",price:55},{name:"KASE KARIŞIK 160 g",price:110},
+  {name:"KURU ÜZÜM 250 g",price:65},{name:"KUŞ LOKUMU 150 g",price:28},
+  {name:"LÜX KARIŞIK 1 kg",price:700},{name:"LÜX KARIŞIK 160 g",price:110},{name:"LÜX KARIŞIK 400 g",price:250},
+  {name:"LÜX KOKTEYL 1 kg",price:1050},{name:"LÜX KOKTEYL 400 g",price:360},{name:"LÜX KOKTEYL 160 g",price:155},
+  {name:"RENKLİ ÇİKOLATALI LEBLEBİ 140 g",price:25},{name:"S1 FISTIK 500 g",price:100},
+  {name:"SADE LEBLEBİ 120 g",price:31},{name:"SOSLU FISTIK 110 g",price:20},{name:"SOSLU MISIR 120 g",price:20},
+  {name:"SUSAMLI FISTIK 120 g",price:20},{name:"SUSAMLI LEBLEBİ 120 g",price:20},
+  {name:"TUZLU FISTIK İÇİ 150 g",price:53},{name:"TUZLU FISTIK İÇİ 1 kg",price:312.5},
+  {name:"TUZLU FISTIK İÇİ 500 g",price:170},{name:"TUZLU FISTIK İÇİ 70 g",price:26},
+  {name:"TUZLU KARIŞIK 130 g",price:28},{name:"TUZLU LEBLEBİ 120 g",price:35},{name:"TUZLU LEBLEBİ 70 g",price:19},
+  {name:"TUZSUZ SİYAH ÇEKİRDEK 120 g",price:27},{name:"ÜZÜMLÜ LEBLEBİ 120 g",price:24},{name:"ŞEKERLİ LEBLEBİ 120 g",price:20}
+];
+
+let D=null, SC=null;
 let unlocked=false, curTab="in";
+let recDir="in", proDir="in", invStock="matiere", repStock="matiere", admStock="matiere";
 let online=navigator.onLine, syncing=false, pushDebounce=null;
 
 // ---------- utilitaires ----------
@@ -390,88 +424,101 @@ function hhmm(ts){ if(!ts) return ""; const d=new Date(ts); return ("0"+d.getHou
 
 // ---------- modèle ----------
 function prod(id){ return D.products[id]; }
-function activeProducts(){ return Object.values(D.products).filter(p=>!p.deleted).sort((a,b)=>(a.name||"").localeCompare(b.name||"","tr")); }
+function isFini(p){ return p&&p.stock==="fini"; }
+function activeProducts(stock){ return Object.values(D.products).filter(p=>!p.deleted&&p.stock===stock).sort((a,b)=>(a.name||"").localeCompare(b.name||"","tr")); }
 function activeMovements(){ return Object.values(D.movements).filter(m=>!m.deleted); }
 function nextOrder(){ let mx=-1; Object.values(D.products).forEach(p=>{ if((p.order||0)>mx) mx=p.order||0; }); return mx+1; }
 function stockMap(){
-  const map={}; activeProducts().forEach(p=>map[p.id]=p.initialKg||0);
-  activeMovements().forEach(m=>{ if(map[m.productId]!=null) map[m.productId]=r3(map[m.productId]+m.kg); });
+  const map={};
+  Object.values(D.products).forEach(p=>{ if(!p.deleted) map[p.id]=(p.stock==="fini"?(p.initialUnits||0):(p.initialKg||0)); });
+  activeMovements().forEach(m=>{ if(map[m.productId]==null) return; map[m.productId]+=(m.stock==="fini"?(m.n||0):(m.kg||0)); });
+  Object.keys(map).forEach(k=>map[k]=r3(map[k]));
   return map;
 }
-function stockOf(id){ return stockMap()[id]||0; }
+function stockOf(id){ const v=stockMap()[id]; return v==null?0:v; }
+function valueOf(p,qty){ return isFini(p)?qty*(p.unitPrice||0):qty*(p.pricePerKg||0); }
+function qLabel(p,qty){ return isFini(p)?(numFR(qty,0)+" u"):(kg(qty)+" kg"); }
 
 function freshData(){
   const products={};
-  DEFAULT_PRODUCTS.forEach((n,i)=>{ const id=uid(); products[id]={id,name:n,pricePerKg:0,pkgKg:5,initialKg:0,order:i,updatedAt:now(),deleted:false}; });
-  return { products, movements:{}, settings:{ adminPass:"1234" }, _seed:true };
+  DEFAULT_PRODUCTS.forEach((n,i)=>{ const id=uid(); products[id]={id,name:n,stock:"matiere",pricePerKg:0,pkgKg:5,initialKg:0,order:i,updatedAt:now(),deleted:false}; });
+  const D0={ products, movements:{}, settings:{ adminPass:"1234", validUntil:{} }, _seed:true };
+  return D0;
 }
-
 function migrateV1(v1){
-  const products={}, movements={};
-  // somme des mouvements par produit pour caler initialKg sur l'ancien stockKg
-  const net={};
+  const products={}, movements={}, net={};
   (v1.receptions||[]).forEach(r=>{ net[r.productId]=(net[r.productId]||0)+r.totalKg; });
   (v1.productions||[]).forEach(r=>{ net[r.productId]=(net[r.productId]||0)-r.totalKg; });
-  (v1.products||[]).forEach((p,i)=>{
-    const name=(p.name==="SİYAH ÇEKİRDEK")?"ÇEKİRDEK":p.name;
-    products[p.id]={ id:p.id, name, pricePerKg:p.pricePerKg||0, pkgKg:(typeof p.pkgKg==="number"?p.pkgKg:5),
-      initialKg:r3((p.stockKg||0)-(net[p.id]||0)), order:i, updatedAt:now(), deleted:false };
-  });
-  (v1.receptions||[]).forEach(r=>{ movements[r.id]={ id:r.id, type:"rec", productId:r.productId, kg:r.totalKg,
-    qty:r.qty, pkgSize:r.pkgSize, date:r.date, ts:r.ts||now(), updatedAt:r.ts||now(), deleted:false }; });
-  (v1.productions||[]).forEach(r=>{ movements[r.id]={ id:r.id, type:"pro", productId:r.productId, kg:-r.totalKg,
-    units:r.units, kgPerUnit:r.kgPerUnit, date:r.date, ts:r.ts||now(), updatedAt:r.ts||now(), deleted:false }; });
-  return { products, movements, settings:{ adminPass:(v1.settings&&v1.settings.adminPass)||"1234" } };
+  (v1.products||[]).forEach((p,i)=>{ const name=(p.name==="SİYAH ÇEKİRDEK")?"ÇEKİRDEK":p.name;
+    products[p.id]={ id:p.id, name, stock:"matiere", pricePerKg:p.pricePerKg||0, pkgKg:(typeof p.pkgKg==="number"?p.pkgKg:5),
+      initialKg:r3((p.stockKg||0)-(net[p.id]||0)), order:i, updatedAt:now(), deleted:false }; });
+  (v1.receptions||[]).forEach(r=>{ movements[r.id]={ id:r.id, stock:"matiere", kind:"in", productId:r.productId, kg:r.totalKg, qty:r.qty, pkgSize:r.pkgSize, date:r.date, ts:r.ts||now(), updatedAt:r.ts||now(), deleted:false }; });
+  (v1.productions||[]).forEach(r=>{ movements[r.id]={ id:r.id, stock:"matiere", kind:"out", productId:r.productId, kg:-r.totalKg, units:r.units, kgPerUnit:r.kgPerUnit, date:r.date, ts:r.ts||now(), updatedAt:r.ts||now(), deleted:false }; });
+  return { products, movements, settings:{ adminPass:(v1.settings&&v1.settings.adminPass)||"1234", validUntil:{} } };
+}
+function ensureSchema(){
+  Object.values(D.products).forEach(p=>{ if(!p.stock) p.stock="matiere";
+    if(p.stock==="matiere"){ if(typeof p.initialKg!=="number") p.initialKg=0; if(typeof p.pkgKg!=="number") p.pkgKg=5; if(typeof p.pricePerKg!=="number") p.pricePerKg=0; }
+    if(typeof p.order!=="number") p.order=0; if(!p.updatedAt) p.updatedAt=now(); });
+  Object.values(D.movements).forEach(m=>{ if(!m.stock) m.stock="matiere";
+    if(!m.kind) m.kind=(m.type==="rec"?"in":m.type==="pro"?"out":m.type==="adj"?"adj":"in"); });
+  if(!D.settings.validUntil) D.settings.validUntil={};
+  seedFiniIfMissing();
+}
+function seedFiniIfMissing(){
+  FINI_CATALOG.forEach((it,i)=>{ const id="f"+(i+1);
+    if(!D.products[id]){ D.products[id]={ id, name:it.name, stock:"fini", unitPrice:it.price, initialUnits:0, order:1000+i, updatedAt:1, deleted:false };
+      SC.dirty.products[id]=true; } }); // seedDirty : pousse sans toucher _seed
+  saveSync();
 }
 
 function load(){
   try{ const raw=localStorage.getItem(KEY); if(raw) D=JSON.parse(raw); }catch(e){ D=null; }
-  if(!D || !D.products){
-    try{ const old=localStorage.getItem(OLD_KEY); if(old){ D=migrateV1(JSON.parse(old)); save(); } }catch(e){ D=null; }
-  }
+  if(!D || !D.products){ try{ const old=localStorage.getItem(OLD_KEY); if(old){ D=migrateV1(JSON.parse(old)); save(); } }catch(e){ D=null; } }
   if(!D || !D.products){ D=freshData(); save(); }
-  if(!D.settings) D.settings={adminPass:"1234"};
+  if(!D.settings) D.settings={adminPass:"1234",validUntil:{}};
   if(!D.movements) D.movements={};
-  if(typeof D._seed!=="boolean") D._seed=false; // données existantes = pas un catalogue par défaut vierge
-  // garde-fous
-  Object.values(D.products).forEach(p=>{ if(typeof p.initialKg!=="number") p.initialKg=0; if(typeof p.pkgKg!=="number") p.pkgKg=5; if(typeof p.pricePerKg!=="number") p.pricePerKg=0; if(typeof p.order!=="number") p.order=0; if(!p.updatedAt) p.updatedAt=now(); });
-  // config sync
+  if(typeof D._seed!=="boolean") D._seed=false;
   try{ SC=JSON.parse(localStorage.getItem(SYNC_KEY)); }catch(e){ SC=null; }
   if(!SC) SC={ url:"", auto:true, lastSync:0, lastError:"", dirty:{products:{},movements:{}} };
   if(!SC.dirty) SC.dirty={products:{},movements:{}};
+  ensureSchema();
 }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(D)); }catch(e){ toast("Erreur d'enregistrement"); } scheduleAutoPush(); }
 function saveSync(){ try{ localStorage.setItem(SYNC_KEY,JSON.stringify(SC)); }catch(e){} }
-
 function markDirty(coll,id){ D._seed=false; SC.dirty[coll][id]=true; saveSync(); }
 function pendingCount(){ return Object.keys(SC.dirty.products).length+Object.keys(SC.dirty.movements).length; }
 
-// écritures modèle
 function pushMovement(o){ o.id=uid(); o.ts=now(); o.updatedAt=now(); o.deleted=false; D.movements[o.id]=o; markDirty("movements",o.id); save(); }
 function softDeleteMovement(id){ const m=D.movements[id]; if(m){ m.deleted=true; m.updatedAt=now(); markDirty("movements",id); save(); } }
 function touchProduct(id){ const p=prod(id); if(p){ p.updatedAt=now(); markDirty("products",id); } }
 
-// ---------- toast ----------
-function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
 
 // ---------- overlay ----------
 const ov=document.getElementById("ov"), ovSheet=document.getElementById("ovSheet");
 function openSheet(html,ctxOut){ ovSheet.className="sheet"+(ctxOut?" screen-out-ctx":""); ovSheet.innerHTML=html; ov.classList.add("show"); }
 function closeSheet(){ ov.classList.remove("show"); }
 ov.addEventListener("click",e=>{ if(e.target===ov) closeSheet(); });
+function openSheetFor(stock,kind,pid){
+  if(stock==="matiere"&&kind==="in") App.sheetMatiereIn(pid);
+  else if(stock==="matiere") App.sheetMatiereOut(pid);
+  else if(stock==="fini"&&kind==="in") App.sheetFiniIn(pid);
+  else App.sheetFiniOut(pid);
+}
 
-// liste des dernières saisies d'un produit (dans le panneau), annulation à 2 temps
-function historyRows(type,pid){
-  const list=activeMovements().filter(m=>m.type===type&&m.productId===pid).sort((a,b)=>b.ts-a.ts).slice(0,6);
+// liste des saisies d'un produit dans le panneau (annulation partielle)
+function historyRows(stock,kind,pid){
+  const list=activeMovements().filter(m=>m.stock===stock&&m.kind===kind&&m.productId===pid).sort((a,b)=>b.ts-a.ts).slice(0,6);
   if(!list.length) return `<div class="empty" style="padding:14px">Aucune saisie pour ce produit.</div>`;
   return list.map(r=>{
-    const cls=type==="rec"?"in":"out", amt=(type==="rec"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg";
-    const detail=type==="rec"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`;
+    const cls=kind==="in"?"in":"out";
+    let detail,amt;
+    if(stock==="matiere"){ detail=kind==="in"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`; amt=(kind==="in"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg"; }
+    else { detail=`${Math.abs(r.n)} unité(s)`; amt=(kind==="in"?"+ ":"− ")+Math.abs(r.n)+" u"; }
     const when=(r.date===todayStr()?"Aujourd'hui":frDate(r.date))+" · "+hhmm(r.ts);
     return `<div class="logrow"><div class="li"><b>${detail}</b><span>${when}</span></div>
-      <div class="amt ${cls}">${amt}</div>
-      <button class="undo" onclick="App.cancelEntry('${r.id}',true)">Annuler</button></div>`;
+      <div class="amt ${cls}">${amt}</div><button class="undo" onclick="App.cancelEntry('${r.id}',true)">Annuler</button></div>`;
   }).join("");
 }
 
@@ -480,342 +527,338 @@ function historyRows(type,pid){
 // =========================================================
 function normUrl(u){ u=(u||"").trim(); if(!u) return ""; if(!/^https?:\/\//.test(u)) u="https://"+u; return u.replace(/\/+$/,""); }
 function ep(path){ return normUrl(SC.url)+"/"+path+".json"; }
-
 function setSyncStatus(){
-  const stEl=document.getElementById("hSyncState"); if(!stEl) return;
-  let txt,color;
+  const stEl=document.getElementById("hSyncState"); if(!stEl) return; let txt,color;
   if(!SC.url){ txt="non configurée"; color="#bcb6a8"; }
   else if(syncing){ txt="en cours…"; color="#caa64a"; }
   else if(SC.lastError){ txt="erreur"; color="#e0795f"; }
   else if(!online){ txt="hors-ligne"; color="#bcb6a8"; }
   else if(SC.lastSync){ txt="à jour · "+hhmm(SC.lastSync); color="#9fd17a"; }
   else { txt="prête"; color="#9fd17a"; }
-  const pc=pendingCount(); if(pc>0 && !syncing) txt+=" ("+pc+" en attente)";
+  const pc=pendingCount(); if(pc>0 && !syncing) txt+=" ("+pc+")";
   stEl.textContent=txt; stEl.style.color=color;
-  if(curTab==="adm" && unlocked) App.renderSync();
+  if(curTab==="adm"&&unlocked) App.renderSync();
 }
-
+async function fetchJSON(url){ const res=await fetch(url,{method:"GET"}); if(!res.ok) throw new Error("lecture "+res.status); return await res.json(); }
+async function putJSON(url,obj){ const res=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)}); if(!res.ok) throw new Error("écriture "+res.status); return await res.json(); }
+function mergeColl(coll,remote,toPush){
+  const local=D[coll]; const ids=new Set([...Object.keys(local),...Object.keys(remote)]);
+  ids.forEach(id=>{ const l=local[id], rr=remote[id];
+    if(l&&!rr){ toPush[coll].push(id); }
+    else if(!l&&rr){ local[id]=rr; }
+    else if(l&&rr){ const lu=l.updatedAt||0, ru=rr.updatedAt||0;
+      if(ru>lu){ local[id]=rr; delete SC.dirty[coll][id]; } else if(lu>ru){ toPush[coll].push(id); } } });
+  Object.keys(SC.dirty[coll]).forEach(id=>{ if(local[id]&&!toPush[coll].includes(id)) toPush[coll].push(id); });
+}
 async function syncNow(manual){
-  if(!SC.url){ if(manual) toast("Indiquez d'abord l'adresse de la base"); setSyncStatus(); return; }
-  if(syncing) return;
-  syncing=true; SC.lastError=""; setSyncStatus();
+  if(!SC.url){ if(manual) toast("Indiquez d'abord l'adresse"); setSyncStatus(); return; }
+  if(syncing) return; syncing=true; SC.lastError=""; setSyncStatus();
   try{
-    // 1) lire le distant
     const [rp,rm]=await Promise.all([ fetchJSON(ep("products")), fetchJSON(ep("movements")) ]);
     const remoteP=rp||{}, remoteM=rm||{};
-    // 1bis) appareil neuf (catalogue par défaut, jamais modifié) rejoignant une base déjà remplie :
-    //       on ADOPTE les données existantes au lieu de créer des doublons.
     if(D._seed && Object.keys(remoteP).length>0){
-      D.products=remoteP; D.movements=remoteM; D._seed=false;
-      SC.dirty={products:{},movements:{}};
-      save(); saveSync();
-      SC.lastSync=now(); SC.lastError=""; saveSync();
-      syncing=false; setSyncStatus(); App.renderAll();
-      if(manual) toast("Données récupérées");
-      return;
+      D.products=remoteP; D.movements=remoteM; D._seed=false; SC.dirty={products:{},movements:{}};
+      ensureSchema(); save(); saveSync(); SC.lastSync=now(); SC.lastError=""; saveSync();
+      syncing=false; setSyncStatus(); App.renderAll(); if(manual) toast("Données récupérées"); return;
     }
-    // 2) fusion (le plus récent gagne, par updatedAt) + détermination de ce qu'il faut envoyer
     const toPush={products:[],movements:[]};
-    mergeColl("products",remoteP,toPush);
-    mergeColl("movements",remoteM,toPush);
-    save(); // état fusionné local
-    // 3) envoyer nos versions gagnantes
+    mergeColl("products",remoteP,toPush); mergeColl("movements",remoteM,toPush);
+    save();
     for(const id of toPush.products){ await putJSON(ep("products/"+id), D.products[id]); delete SC.dirty.products[id]; }
     for(const id of toPush.movements){ await putJSON(ep("movements/"+id), D.movements[id]); delete SC.dirty.movements[id]; }
-    SC.lastSync=now(); SC.lastError=""; saveSync();
-    syncing=false; setSyncStatus(); App.renderAll();
+    SC.lastSync=now(); SC.lastError=""; saveSync(); syncing=false; setSyncStatus(); App.renderAll();
     if(manual) toast("Synchronisé");
-  }catch(e){
-    syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus();
-    if(manual) toast("Échec : "+SC.lastError);
-  }
+  }catch(e){ syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus(); if(manual) toast("Échec : "+SC.lastError); }
 }
-function mergeColl(coll,remote,toPush){
-  const local=D[coll];
-  const ids=new Set([...Object.keys(local),...Object.keys(remote)]);
-  ids.forEach(id=>{
-    const l=local[id], rrec=remote[id];
-    if(l && !rrec){ toPush[coll].push(id); }                         // nouveau chez nous
-    else if(!l && rrec){ local[id]=rrec; }                            // nouveau chez eux
-    else if(l && rrec){
-      const lu=l.updatedAt||0, ru=rrec.updatedAt||0;
-      if(ru>lu){ local[id]=rrec; delete SC.dirty[coll][id]; }         // eux plus récents
-      else if(lu>ru){ toPush[coll].push(id); }                        // nous plus récents
-      else { /* égal : rien */ }
-    }
-  });
-  // toujours renvoyer ce qui est marqué "à envoyer" même si égal en apparence
-  Object.keys(SC.dirty[coll]).forEach(id=>{ if(local[id] && !toPush[coll].includes(id)) toPush[coll].push(id); });
-}
-async function fetchJSON(url){
-  const res=await fetch(url,{method:"GET"});
-  if(!res.ok) throw new Error("lecture "+res.status);
-  return await res.json();
-}
-async function putJSON(url,obj){
-  const res=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});
-  if(!res.ok) throw new Error("écriture "+res.status);
-  return await res.json();
-}
-function scheduleAutoPush(){
-  if(!SC||!SC.auto||!SC.url||!online) return;
-  clearTimeout(pushDebounce); pushDebounce=setTimeout(()=>syncNow(false),1500);
-}
+function scheduleAutoPush(){ if(!SC||!SC.auto||!SC.url||!online) return; clearTimeout(pushDebounce); pushDebounce=setTimeout(()=>syncNow(false),1500); }
 function syncTick(){ if(SC&&SC.auto&&SC.url&&online&&!syncing) syncNow(false); }
 
 // =========================================================
 //  App
 // =========================================================
 const App={
-  _armed:null, _ctx:null,
-
   go(tab){
     curTab=tab;
     document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
     document.getElementById("scr-"+tab).classList.add("active");
-    document.querySelectorAll(".nav-b").forEach(b=>{
-      b.classList.toggle("on",b.dataset.tab===tab);
-      b.classList.toggle("in",b.dataset.tab===tab&&tab==="in");
-      b.classList.toggle("out",b.dataset.tab===tab&&tab==="out");
-    });
-    document.body.classList.toggle("screen-in",tab==="in");
-    document.body.classList.toggle("screen-out",tab==="out");
+    document.querySelectorAll(".nav-b").forEach(b=>b.classList.toggle("on",b.dataset.tab===tab));
+    const dir=tab==="in"?recDir:tab==="out"?proDir:"in";
+    document.body.classList.toggle("screen-in",dir==="in");
+    document.body.classList.toggle("screen-out",dir==="out");
     const badge=document.getElementById("modeBadge");
     const L={in:["Réception","in"],out:["Production","out"],inv:["Inventaire","neutral"],rep:["Rapport","neutral"],adm:["Admin","neutral"]};
-    badge.textContent=L[tab][0]; badge.className="h-mode "+L[tab][1];
+    badge.textContent=L[tab][0]; badge.className="h-mode "+(tab==="in"||tab==="out"?(dir==="in"?"in":"out"):"neutral");
     window.scrollTo(0,0); this.renderAll();
   },
 
   renderAll(){
     this.renderHeader(); this.renderDayChips();
-    if(curTab==="in"||curTab==="out"){ this.renderGrids(); this.renderLogs(); }
+    if(curTab==="in") this.renderRec();
+    if(curTab==="out") this.renderPro();
     if(curTab==="inv") this.renderInv();
     if(curTab==="rep") this.renderRep();
     if(curTab==="adm") this.renderAdmin();
     setSyncStatus();
   },
-
+  ctxStock(){ return curTab==="in"?"matiere":curTab==="out"?"fini":curTab==="inv"?invStock:curTab==="rep"?repStock:admStock; },
   renderHeader(){
-    const sm=stockMap(); let totKg=0,totVal=0;
-    activeProducts().forEach(p=>{ totKg+=sm[p.id]||0; totVal+=(sm[p.id]||0)*p.pricePerKg; });
-    document.getElementById("hTotalKg").textContent=kg(totKg)+" kg";
+    const st=this.ctxStock(), sm=stockMap(); let totQ=0,totVal=0;
+    activeProducts(st).forEach(p=>{ const q=sm[p.id]||0; totQ+=q; totVal+=valueOf(p,q); });
+    document.getElementById("hTot1").innerHTML=(st==="fini"?"Unités ":"Stock ")+`<b id="hTotalKg">${st==="fini"?numFR(totQ,0)+" u":kg(totQ)+" kg"}</b>`;
     document.getElementById("hTotalVal").textContent=money(totVal);
   },
+  renderDayChips(){ const t=frDate(todayStr()); ["dayIn","dayOut","dayInv","dayRep","dayAdm"].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=t; }); },
 
-  renderDayChips(){ const t=frDate(todayStr());
-    ["dayIn","dayOut","dayInv","dayRep","dayAdm"].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=t; }); },
+  // ---------- bascules ----------
+  setDir(tab,dir){ if(tab==="in") recDir=dir; else proDir=dir;
+    document.getElementById(tab==="in"?"segInIn":"segOutIn").className=(dir==="in"?"on in":"");
+    document.getElementById(tab==="in"?"segInOut":"segOutOut").className=(dir==="out"?"on out":"");
+    document.body.classList.toggle("screen-in",dir==="in"); document.body.classList.toggle("screen-out",dir==="out");
+    const badge=document.getElementById("modeBadge"); badge.className="h-mode "+(dir==="in"?"in":"out");
+    if(tab==="in") this.renderRec(); else this.renderPro(); },
+  setInvStock(s){ invStock=s; document.getElementById("segInvM").className=(s==="matiere"?"on neutral":""); document.getElementById("segInvF").className=(s==="fini"?"on neutral":""); this.renderHeader(); this.renderInv(); },
+  setRepStock(s){ repStock=s; document.getElementById("segRepM").className=(s==="matiere"?"on neutral":""); document.getElementById("segRepF").className=(s==="fini"?"on neutral":""); this.renderHeader(); this.renderRep(); },
+  setAdmStock(s){ admStock=s; document.getElementById("segAdmM").className=(s==="matiere"?"on neutral":""); document.getElementById("segAdmF").className=(s==="fini"?"on neutral":""); this.renderAdmin(); },
 
-  renderGrids(){
-    const date=document.getElementById("workDate").value||todayStr();
-    const mv=activeMovements();
-    const recDay=mv.filter(m=>m.type==="rec"&&m.date===date), proDay=mv.filter(m=>m.type==="pro"&&m.date===date);
+  // ---------- RÉCEPTION (matières) ----------
+  renderRec(){
+    const date=document.getElementById("workDate").value||todayStr(), mv=activeMovements(), sm=stockMap();
+    const dayMv=mv.filter(m=>m.stock==="matiere"&&m.kind===recDir&&m.date===date);
     const sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
-    document.getElementById("inKgDay").innerHTML=kg(sum(recDay,m=>m.kg))+"<small> kg</small>";
-    document.getElementById("inPkgDay").textContent=sum(recDay,m=>m.qty||0);
-    document.getElementById("inProdDay").textContent=new Set(recDay.map(m=>m.productId)).size;
-    document.getElementById("outKgDay").innerHTML=kg(sum(proDay,m=>-m.kg))+"<small> kg</small>";
-    document.getElementById("outPkgDay").textContent=sum(proDay,m=>m.units||0);
-    document.getElementById("outProdDay").textContent=new Set(proDay.map(m=>m.productId)).size;
-
-    const sm=stockMap();
-    const tile=p=>{ const s=sm[p.id]||0; let cls="ok",txt=kg(s)+" kg";
-      if(s<=0){ cls="empty"; txt="Rupture"; } else if(s<p.pkgKg){ cls="low"; }
+    document.getElementById("mr_c1").className="scard acc-"+(recDir==="in"?"in":"out");
+    document.getElementById("mr_c2").className="scard acc-"+(recDir==="in"?"in":"out");
+    document.getElementById("mr_s1l").textContent=recDir==="in"?"Entrées du jour":"Sorties du jour";
+    document.getElementById("mr_s1v").innerHTML=kg(Math.abs(sum(dayMv,m=>m.kg)))+"<small> kg</small>";
+    document.getElementById("mr_s2l").textContent=recDir==="in"?"Colis reçus":"Unités prélevées";
+    document.getElementById("mr_s2v").textContent=recDir==="in"?sum(dayMv,m=>m.qty||0):sum(dayMv,m=>m.units||0);
+    document.getElementById("mr_s3v").textContent=new Set(dayMv.map(m=>m.productId)).size;
+    document.getElementById("leadIn").textContent=recDir==="in"
+      ?"Sélectionnez un produit livré, puis le format du colis et la quantité reçue."
+      :"Sélectionnez un produit pris pour la production (sortie de matière du stock).";
+    const tile=p=>{ const s=sm[p.id]||0; let cls="ok",txt=kg(s)+" kg"; if(s<=0){cls="empty";txt="Rupture";} else if(s<p.pkgKg){cls="low";}
       return `<button class="pbtn" onclick="App.pick('${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
-    document.getElementById("gridIn").innerHTML=activeProducts().map(tile).join("")+
+    document.getElementById("gridIn").innerHTML=activeProducts("matiere").map(tile).join("")+
       `<button class="pbtn add" onclick="App.addProductPrompt()"><span class="plus">＋</span>Ajouter un produit</button>`;
-    document.getElementById("gridOut").innerHTML=activeProducts().map(tile).join("");
+    this.renderLogs("matiere",recDir,"logIn");
+  },
+  pick(id){ const p=prod(id); if(!p) return;
+    if(p.stock==="matiere"){ if(recDir==="in") this.sheetMatiereIn(id); else this.sheetMatiereOut(id); }
+    else { if(proDir==="in") this.sheetFiniIn(id); else this.sheetFiniOut(id); } },
+
+  // ---------- PRODUCTION (produits finis) ----------
+  renderPro(){
+    const date=document.getElementById("workDate").value||todayStr(), mv=activeMovements(), sm=stockMap();
+    const dayMv=mv.filter(m=>m.stock==="fini"&&m.kind===proDir&&m.date===date);
+    const sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
+    document.getElementById("fp_c1").className="scard acc-"+(proDir==="in"?"in":"out");
+    document.getElementById("fp_s1l").textContent=proDir==="in"?"Entrées du jour":"Sorties du jour";
+    document.getElementById("fp_s1v").innerHTML=Math.abs(sum(dayMv,m=>m.n||0))+"<small> u</small>";
+    let val=0; dayMv.forEach(m=>{ const p=prod(m.productId); if(p) val+=Math.abs(m.n||0)*(p.unitPrice||0); });
+    document.getElementById("fp_s2v").innerHTML=numFR(val,0)+"<small> ₺</small>";
+    document.getElementById("fp_s3v").textContent=new Set(dayMv.map(m=>m.productId)).size;
+    document.getElementById("leadOut").textContent=proDir==="in"
+      ?"Ajout de produits finis au stock (fabrication / emballage)."
+      :"Sortie de produits finis (ventes / expéditions).";
+    const tile=p=>{ const s=sm[p.id]||0; let cls="ok",txt=numFR(s,0)+" u"; if(s<=0){cls="empty";txt="Rupture";} else if(s<5){cls="low";}
+      return `<button class="pbtn" onclick="App.pick('${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
+    document.getElementById("gridOut").innerHTML=activeProducts("fini").map(tile).join("")+
+      `<button class="pbtn add" onclick="App.addProductPrompt()"><span class="plus">＋</span>Ajouter un produit</button>`;
+    this.renderLogs("fini",proDir,"logOut");
   },
 
-  renderLogs(){
+  renderLogs(stock,dir,elId){
+    const since=(D.settings.validUntil[stock+"_"+dir])||0;
+    const list=activeMovements().filter(m=>m.stock===stock&&m.kind===dir&&m.ts>since).sort((a,b)=>b.ts-a.ts).slice(0,50);
     const today=todayStr(), tag=iso=>iso===today?"":`<span class="tag">${frDate(iso)}</span>`;
-    const mv=activeMovements();
-    const recSince=D.settings.recValidatedUntil||0, proSince=D.settings.proValidatedUntil||0;
-    const rec=mv.filter(m=>m.type==="rec"&&m.ts>recSince).sort((a,b)=>b.ts-a.ts).slice(0,50);
-    const pro=mv.filter(m=>m.type==="pro"&&m.ts>proSince).sort((a,b)=>b.ts-a.ts).slice(0,50);
-    const validBtn=t=>`<button class="btn btn-dark" style="margin-bottom:10px" onclick="App.validateLog('${t}')">✓ Valider la liste</button>`;
-    document.getElementById("logIn").innerHTML=rec.length?(validBtn("rec")+rec.map(r=>{ const p=prod(r.productId);
-      return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${r.qty} × ${kg(r.pkgSize)} kg · ${hhmm(r.ts)}</span></div>
-        <div class="amt in">+ ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
-    }).join("")):`<div class="empty">Aucune réception à vérifier.</div>`;
-    document.getElementById("logOut").innerHTML=pro.length?(validBtn("pro")+pro.map(r=>{ const p=prod(r.productId);
-      return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${r.units} × ${kg(r.kgPerUnit)} kg · ${hhmm(r.ts)}</span></div>
-        <div class="amt out">− ${kg(Math.abs(r.kg))} kg</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
-    }).join("")):`<div class="empty">Aucune production à vérifier.</div>`;
+    const validBtn=`<button class="btn btn-dark" style="margin-bottom:10px" onclick="App.validateLog('${stock}','${dir}')">✓ Valider la liste</button>`;
+    document.getElementById(elId).innerHTML=list.length?(validBtn+list.map(r=>{ const p=prod(r.productId);
+      const det=stock==="matiere"?(dir==="in"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`):`${Math.abs(r.n)} unité(s)`;
+      const amt=stock==="matiere"?((dir==="in"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg"):((dir==="in"?"+ ":"− ")+Math.abs(r.n)+" u");
+      return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${det} · ${hhmm(r.ts)}</span></div>
+        <div class="amt ${dir==="in"?"in":"out"}">${amt}</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
+    }).join("")):`<div class="empty">Aucune saisie à vérifier.</div>`;
   },
+  validateLog(stock,dir){ D.settings.validUntil[stock+"_"+dir]=now(); save(); toast("Liste validée");
+    if(curTab==="in") this.renderRec(); else if(curTab==="out") this.renderPro(); },
 
-  validateLog(type){
-    if(type==="rec") D.settings.recValidatedUntil=now(); else D.settings.proValidatedUntil=now();
-    save(); toast("Liste validée"); this.renderLogs();
-  },
-
-  // ---------- sélection produit ----------
-  pick(id){ if(curTab==="in") this.sheetReception(id); else this.sheetProduction(id); },
-
-  // ---------- annulation partielle d'une saisie ----------
-  cancelEntry(id, fromSheet){
+  // ---------- annulation partielle ----------
+  cancelEntry(id,fromSheet){
     const m=D.movements[id]; if(!m) return; const p=prod(m.productId);
-    const isRec=m.type==="rec";
-    const per=isRec?m.pkgSize:m.kgPerUnit;          // poids d'un colis/unité
-    const total=isRec?(m.qty||0):(m.units||0);      // nb de colis/unités de la saisie
-    const unitWord=isRec?"colis":"unité(s)";
-    let n=total;                                    // par défaut on annule tout
-    const draw=()=>{ const removedKg=r3(n*per), remainQty=total-n, remainKg=r3(remainQty*per);
-      openSheet(`<h3>Annuler une saisie</h3>
-        <div class="sub">${esc(p?p.name:"")} · saisie de ${total} × ${kg(per)} kg = ${kg(total*per)} kg</div>
-        <div class="field" style="margin-top:0"><label>Quantité à annuler (${unitWord})</label>
+    const fini=m.stock==="fini", isIn=m.kind==="in";
+    const total=fini?Math.abs(m.n):(isIn?(m.qty||0):(m.units||0));
+    const per=fini?1:(isIn?m.pkgSize:m.kgPerUnit);
+    const word=fini?"unité(s)":(isIn?"colis":"unité(s)");
+    let n=total;
+    const txt=(rem)=>{ if(fini){ return n===total?"Saisie entièrement annulée":("Saisie ramenée à "+(total-n)+" unité(s)"); }
+      return n===total?"Saisie entièrement annulée":("Saisie ramenée à "+(total-n)+" × "+kg(per)+" kg"); };
+    const big=()=>fini?(numFR(n,0)+" u"):(kg(r3(n*per))+" kg");
+    const sub=()=>fini?`${esc(p?p.name:"")} · saisie de ${total} unité(s)` : `${esc(p?p.name:"")} · saisie de ${total} × ${kg(per)} kg`;
+    const draw=()=>{ openSheet(`<h3>Annuler une saisie</h3><div class="sub">${sub()}</div>
+        <div class="field" style="margin-top:0"><label>Quantité à annuler (${word})</label>
           <div class="stepper"><button class="step-b" onclick="window._ceN(-1)">−</button>
           <input class="num tnum" id="ceN" inputmode="numeric" value="${n}" oninput="window._ceIn(this.value)">
           <button class="step-b" onclick="window._ceN(1)">＋</button></div></div>
-        <div class="calc">${isRec?"Retiré du stock":"Remis au stock"}
-          <div class="big ${isRec?'out':'in'} tnum">${kg(removedKg)} kg</div>
-          <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${n===total?"Saisie entièrement annulée":"Saisie ramenée à "+remainQty+" × "+kg(per)+" kg = "+kg(remainKg)+" kg"}</div></div>
+        <div class="calc">${isIn?"Retiré du stock":"Remis au stock"}<div class="big ${isIn?'out':'in'} tnum">${big()}</div>
+          <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${txt()}</div></div>
         <div class="btn-row"><button class="btn btn-ghost" onclick="window._ceCancel()">Fermer</button>
-          <button class="btn btn-danger" onclick="window._ceOk()">Confirmer l'annulation</button></div>`, false);
-    };
-    const upd=()=>{ const removedKg=r3(n*per), remainQty=total-n, remainKg=r3(remainQty*per); const c=ovSheet.querySelector(".calc");
-      if(c) c.innerHTML=`${isRec?"Retiré du stock":"Remis au stock"}<div class="big ${isRec?'out':'in'} tnum">${kg(removedKg)} kg</div>
-        <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${n===total?"Saisie entièrement annulée":"Saisie ramenée à "+remainQty+" × "+kg(per)+" kg = "+kg(remainKg)+" kg"}</div>`; };
+          <button class="btn btn-danger" onclick="window._ceOk()">Confirmer l'annulation</button></div>`, false); };
+    const upd=()=>{ const c=ovSheet.querySelector(".calc"); if(c) c.innerHTML=`${isIn?"Retiré du stock":"Remis au stock"}<div class="big ${isIn?'out':'in'} tnum">${big()}</div>
+        <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${txt()}</div>`; };
     window._ceN=d=>{ n=Math.min(total,Math.max(0,n+d)); document.getElementById("ceN").value=n; upd(); };
     window._ceIn=v=>{ n=Math.min(total,Math.max(0,Math.floor(parseNum(v)||0))); upd(); };
-    window._ceCancel=()=>{ if(fromSheet){ if(isRec) App.sheetReception(m.productId); else App.sheetProduction(m.productId); } else closeSheet(); };
-    window._ceOk=()=>{
-      if(n<=0){ window._ceCancel(); return; }
+    window._ceCancel=()=>{ if(fromSheet) openSheetFor(m.stock,m.kind,m.productId); else closeSheet(); };
+    window._ceOk=()=>{ if(n<=0){ window._ceCancel(); return; }
       if(n>=total){ softDeleteMovement(id); }
-      else { const rq=total-n; if(isRec){ m.qty=rq; m.kg=r3(rq*per); } else { m.units=rq; m.kg=r3(-rq*per); } m.updatedAt=now(); markDirty("movements",id); save(); }
+      else { const rq=total-n;
+        if(fini){ m.n=(isIn?rq:-rq); } else if(isIn){ m.qty=rq; m.kg=r3(rq*per); } else { m.units=rq; m.kg=r3(-rq*per); }
+        m.updatedAt=now(); markDirty("movements",id); save(); }
       toast(n>=total?"Saisie annulée":"Saisie corrigée");
-      if(fromSheet){ if(isRec) App.sheetReception(m.productId); else App.sheetProduction(m.productId); }
-      else { closeSheet(); }
-      App.renderHeader();
-      if(curTab==="in"||curTab==="out") App.renderLogs();
-    };
+      if(fromSheet) openSheetFor(m.stock,m.kind,m.productId); else closeSheet();
+      App.renderHeader(); if(curTab==="in") App.renderRec(); else if(curTab==="out") App.renderPro(); };
     draw();
   },
 
-  // ========== RÉCEPTION ==========
-  sheetReception(id){
-    const p=prod(id); App._ctx={type:"rec",pid:id}; App._armed=null;
-    const st={size:5,custom:"",qty:1};
+  // ========== Matière ENTRÉE ==========
+  sheetMatiereIn(id){
+    const p=prod(id); const st={size:5,custom:"",qty:1};
     const render=()=>{ const total=(st.size||0)*(st.qty||0);
-      openSheet(`<h3>${esc(p.name)}</h3>
-        <div class="sub">Réception · stock actuel ${kg(stockOf(id))} kg</div>
+      openSheet(`<h3>${esc(p.name)}</h3><div class="sub">Réception · stock actuel ${kg(stockOf(id))} kg</div>
         <label style="display:block;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Format du colis</label>
-        <div class="pills">
-          <div class="pill ${st.size===5?'sel':''}" onclick="window._rcSize(5)">5 kg</div>
-          <div class="pill ${st.size===10?'sel':''}" onclick="window._rcSize(10)">10 kg</div>
-          <div class="pill ${(st.size!==5&&st.size!==10)?'sel':''}" onclick="window._rcSize('autre')">Autre</div>
-        </div>
+        <div class="pills"><div class="pill ${st.size===5?'sel':''}" onclick="window._s(5)">5 kg</div>
+          <div class="pill ${st.size===10?'sel':''}" onclick="window._s(10)">10 kg</div>
+          <div class="pill ${(st.size!==5&&st.size!==10)?'sel':''}" onclick="window._s('a')">Autre</div></div>
         ${(st.size!==5&&st.size!==10)?`<div class="field" style="margin-top:10px"><label>Poids d'un colis (kg)</label>
-          <input class="num" id="rcCustom" inputmode="decimal" value="${st.custom}" placeholder="ex. 3" oninput="window._rcCustom(this.value)"></div>`:''}
+          <input class="num" id="cu" inputmode="decimal" value="${st.custom}" placeholder="ex. 3" oninput="window._cu(this.value)"></div>`:''}
         <div class="field"><label>Nombre de colis / pochettes</label>
-          <div class="stepper"><button class="step-b" onclick="window._rcQty(-1)">−</button>
-          <input class="num tnum" id="rcQty" inputmode="numeric" value="${st.qty}" oninput="window._rcQtyInput(this.value)">
-          <button class="step-b" onclick="window._rcQty(1)">＋</button></div></div>
+          <div class="stepper"><button class="step-b" onclick="window._q(-1)">−</button>
+          <input class="num tnum" id="q" inputmode="numeric" value="${st.qty}" oninput="window._qi(this.value)">
+          <button class="step-b" onclick="window._q(1)">＋</button></div></div>
         <div class="calc">Total reçu<div class="big in tnum">+ ${kg(total)} kg</div>
           <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${st.qty} × ${kg(st.size||0)} kg · nouveau stock ${kg(stockOf(id)+total)} kg</div></div>
-        <div class="btn-row"><button class="btn btn-ghost" onclick="window._rcCancel()">Fermer</button>
-          <button class="btn btn-in" onclick="window._rcSave()">Enregistrer</button></div>
-        <div class="section-title" style="margin-top:22px">Dernières saisies de ce produit</div>
-        <div id="histBox">${historyRows("rec",id)}</div>`, false);
-    };
+        <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Fermer</button>
+          <button class="btn btn-in" onclick="window._ok()">Enregistrer</button></div>
+        <div class="section-title" style="margin-top:22px">Dernières entrées de ce produit</div>
+        <div id="histBox">${historyRows("matiere","in",id)}</div>`, false); };
     const upd=()=>{ const total=(st.size||0)*(st.qty||0); const c=ovSheet.querySelector(".calc");
-      if(c) c.innerHTML=`Total reçu<div class="big in tnum">+ ${kg(total)} kg</div>
-        <div style="color:var(--muted);font-size:12.5px;margin-top:4px">${st.qty} × ${kg(st.size||0)} kg · nouveau stock ${kg(stockOf(id)+total)} kg</div>`; };
-    window._rcSize=v=>{ if(v==='autre'){ st.size=parseNum(st.custom)||0; if(st.size===5||st.size===10) st.size=0; } else st.size=v; render(); };
-    window._rcCustom=v=>{ st.custom=v; st.size=parseNum(v)||0; upd(); };
-    window._rcQty=d=>{ st.qty=Math.max(1,(st.qty||0)+d); render(); };
-    window._rcQtyInput=v=>{ st.qty=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
-    window._rcCancel=closeSheet;
-    window._rcSave=()=>{ if(!st.size||st.size<=0){ toast("Format invalide"); return; } if(!st.qty||st.qty<=0){ toast("Quantité invalide"); return; }
-      const date=document.getElementById("workDate").value||todayStr(); const total=st.size*st.qty;
-      pushMovement({type:"rec",productId:id,kg:r3(total),qty:st.qty,pkgSize:st.size,date});
-      closeSheet(); toast("Réception : +"+kg(total)+" kg · "+p.name); App.renderAll(); };
+      if(c) c.innerHTML=`Total reçu<div class="big in tnum">+ ${kg(total)} kg</div><div style="color:var(--muted);font-size:12.5px;margin-top:4px">${st.qty} × ${kg(st.size||0)} kg · nouveau stock ${kg(stockOf(id)+total)} kg</div>`; };
+    window._s=v=>{ if(v==='a'){ st.size=parseNum(st.custom)||0; if(st.size===5||st.size===10) st.size=0; } else st.size=v; render(); };
+    window._cu=v=>{ st.custom=v; st.size=parseNum(v)||0; upd(); };
+    window._q=d=>{ st.qty=Math.max(1,(st.qty||0)+d); render(); };
+    window._qi=v=>{ st.qty=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
+    window._ok=()=>{ if(!st.size||st.size<=0){ toast("Format invalide"); return; } if(!st.qty||st.qty<=0){ toast("Quantité invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr(), total=st.size*st.qty;
+      pushMovement({stock:"matiere",kind:"in",productId:id,kg:r3(total),qty:st.qty,pkgSize:st.size,date});
+      closeSheet(); toast("Réception : +"+kg(total)+" kg"); App.renderAll(); };
     render();
   },
-
-  // ========== PRODUCTION ==========
-  sheetProduction(id){
-    const p=prod(id); App._ctx={type:"pro",pid:id}; App._armed=null;
-    const st={units:1,perUnit:p.pkgKg||5};
+  // ========== Matière SORTIE ==========
+  sheetMatiereOut(id){
+    const p=prod(id); const st={units:1,perUnit:p.pkgKg||5};
     const render=()=>{ const total=(st.perUnit||0)*(st.units||0), after=stockOf(id)-total;
-      openSheet(`<h3>${esc(p.name)}</h3>
-        <div class="sub">Production · stock actuel ${kg(stockOf(id))} kg</div>
+      openSheet(`<h3>${esc(p.name)}</h3><div class="sub">Sortie matière · stock actuel ${kg(stockOf(id))} kg</div>
         <div class="field" style="margin-top:0"><label>Unités prélevées (colis / pochettes)</label>
-          <div class="stepper"><button class="step-b" onclick="window._pdUnits(-1)">−</button>
-          <input class="num tnum" id="pdUnits" inputmode="numeric" value="${st.units}" oninput="window._pdInput(this.value)">
-          <button class="step-b" onclick="window._pdUnits(1)">＋</button></div></div>
-        <div class="field"><label>Poids d'une unité (kg)</label>
-          <input class="num" id="pdPer" inputmode="decimal" value="${st.perUnit}" oninput="window._pdPer(this.value)"></div>
+          <div class="stepper"><button class="step-b" onclick="window._u(-1)">−</button>
+          <input class="num tnum" id="u" inputmode="numeric" value="${st.units}" oninput="window._ui(this.value)">
+          <button class="step-b" onclick="window._u(1)">＋</button></div></div>
+        <div class="field"><label>Poids d'une unité (kg)</label><input class="num" id="pu" inputmode="decimal" value="${st.perUnit}" oninput="window._pu(this.value)"></div>
         <div class="calc">Sortie de stock<div class="big out tnum">− ${kg(total)} kg</div>
           <div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">${st.units} × ${kg(st.perUnit||0)} kg · stock après ${kg(after)} kg ${after<0?'⚠️ négatif':''}</div></div>
-        <div class="btn-row"><button class="btn btn-ghost" onclick="window._pdCancel()">Fermer</button>
-          <button class="btn btn-out" onclick="window._pdSave()">Enregistrer</button></div>
-        <div class="section-title" style="margin-top:22px">Dernières saisies de ce produit</div>
-        <div id="histBox">${historyRows("pro",id)}</div>`, true);
-    };
+        <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Fermer</button>
+          <button class="btn btn-out" onclick="window._ok()">Enregistrer</button></div>
+        <div class="section-title" style="margin-top:22px">Dernières sorties de ce produit</div>
+        <div id="histBox">${historyRows("matiere","out",id)}</div>`, true); };
     const upd=()=>{ const total=(st.perUnit||0)*(st.units||0), after=stockOf(id)-total; const c=ovSheet.querySelector(".calc");
-      if(c) c.innerHTML=`Sortie de stock<div class="big out tnum">− ${kg(total)} kg</div>
-        <div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">${st.units} × ${kg(st.perUnit||0)} kg · stock après ${kg(after)} kg ${after<0?'⚠️ négatif':''}</div>`; };
-    window._pdUnits=d=>{ st.units=Math.max(1,(st.units||0)+d); render(); };
-    window._pdInput=v=>{ st.units=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
-    window._pdPer=v=>{ st.perUnit=parseNum(v)||0; upd(); };
-    window._pdCancel=closeSheet;
-    window._pdSave=()=>{ if(!st.units||st.units<=0){ toast("Nombre d'unités invalide"); return; } if(!st.perUnit||st.perUnit<=0){ toast("Poids d'unité invalide"); return; }
-      const date=document.getElementById("workDate").value||todayStr(); const total=st.perUnit*st.units;
+      if(c) c.innerHTML=`Sortie de stock<div class="big out tnum">− ${kg(total)} kg</div><div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">${st.units} × ${kg(st.perUnit||0)} kg · stock après ${kg(after)} kg ${after<0?'⚠️ négatif':''}</div>`; };
+    window._u=d=>{ st.units=Math.max(1,(st.units||0)+d); render(); };
+    window._ui=v=>{ st.units=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
+    window._pu=v=>{ st.perUnit=parseNum(v)||0; upd(); };
+    window._ok=()=>{ if(!st.units||st.units<=0){ toast("Nombre d'unités invalide"); return; } if(!st.perUnit||st.perUnit<=0){ toast("Poids invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr(), total=st.perUnit*st.units;
       if(st.perUnit!==p.pkgKg){ p.pkgKg=st.perUnit; touchProduct(id); }
-      pushMovement({type:"pro",productId:id,kg:r3(-total),units:st.units,kgPerUnit:st.perUnit,date});
-      closeSheet(); toast("Production : −"+kg(total)+" kg · "+p.name); App.renderAll(); };
+      pushMovement({stock:"matiere",kind:"out",productId:id,kg:r3(-total),units:st.units,kgPerUnit:st.perUnit,date});
+      closeSheet(); toast("Sortie : −"+kg(total)+" kg"); App.renderAll(); };
+    render();
+  },
+  // ========== Fini ENTRÉE ==========
+  sheetFiniIn(id){ this._sheetFini(id,"in"); },
+  sheetFiniOut(id){ this._sheetFini(id,"out"); },
+  _sheetFini(id,dir){
+    const p=prod(id); const isIn=dir==="in"; const st={units:1};
+    const render=()=>{ const after=stockOf(id)+(isIn?st.units:-st.units);
+      openSheet(`<h3>${esc(p.name)}</h3><div class="sub">Produit fini · ${numFR(p.unitPrice||0,2)} ₺/u · stock actuel ${numFR(stockOf(id),0)} u</div>
+        <div class="field" style="margin-top:0"><label>${isIn?"Quantité ajoutée (unités)":"Quantité sortie (unités)"}</label>
+          <div class="stepper"><button class="step-b" onclick="window._u(-1)">−</button>
+          <input class="num tnum" id="u" inputmode="numeric" value="${st.units}" oninput="window._ui(this.value)">
+          <button class="step-b" onclick="window._u(1)">＋</button></div></div>
+        <div class="calc">${isIn?"Entrée au stock":"Sortie du stock"}<div class="big ${isIn?'in':'out'} tnum">${isIn?"+ ":"− "}${numFR(st.units,0)} u</div>
+          <div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">Valeur ${money(st.units*(p.unitPrice||0))} · stock après ${numFR(after,0)} u ${after<0?'⚠️ négatif':''}</div></div>
+        <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Fermer</button>
+          <button class="btn ${isIn?'btn-in':'btn-out'}" onclick="window._ok()">Enregistrer</button></div>
+        <div class="section-title" style="margin-top:22px">Dernières ${isIn?"entrées":"sorties"} de ce produit</div>
+        <div id="histBox">${historyRows("fini",dir,id)}</div>`, !isIn); };
+    const upd=()=>{ const after=stockOf(id)+(isIn?st.units:-st.units); const c=ovSheet.querySelector(".calc");
+      if(c) c.innerHTML=`${isIn?"Entrée au stock":"Sortie du stock"}<div class="big ${isIn?'in':'out'} tnum">${isIn?"+ ":"− "}${numFR(st.units,0)} u</div><div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">Valeur ${money(st.units*(p.unitPrice||0))} · stock après ${numFR(after,0)} u ${after<0?'⚠️ négatif':''}</div>`; };
+    window._u=d=>{ st.units=Math.max(1,(st.units||0)+d); render(); };
+    window._ui=v=>{ st.units=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
+    window._ok=()=>{ if(!st.units||st.units<=0){ toast("Quantité invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr();
+      pushMovement({stock:"fini",kind:dir,productId:id,n:(isIn?st.units:-st.units),date});
+      closeSheet(); toast((isIn?"Entrée : +":"Sortie : −")+numFR(st.units,0)+" u"); App.renderAll(); };
     render();
   },
 
   // ---------- INVENTAIRE ----------
   renderInv(){
-    const q=(document.getElementById("invSearch").value||"").toLocaleLowerCase("tr");
-    const sm=stockMap(); let totKg=0,totVal=0,empty=0;
-    activeProducts().forEach(p=>{ const s=sm[p.id]||0; totKg+=s; totVal+=s*p.pricePerKg; if(s<=0) empty++; });
-    document.getElementById("invTotalKg").innerHTML=kg(totKg)+"<small> kg</small>";
+    const st=invStock, fini=st==="fini", q=(document.getElementById("invSearch").value||"").toLocaleLowerCase("tr");
+    const sm=stockMap(); let totQ=0,totVal=0,empty=0;
+    activeProducts(st).forEach(p=>{ const s=sm[p.id]||0; totQ+=s; totVal+=valueOf(p,s); if(s<=0) empty++; });
+    document.getElementById("inv_s1l").textContent=fini?"Unités en stock":"Stock total";
+    document.getElementById("invTotalKg").innerHTML=fini?(numFR(totQ,0)+"<small> u</small>"):(kg(totQ)+"<small> kg</small>");
     document.getElementById("invTotalVal").innerHTML=numFR(totVal,0)+"<small> ₺</small>";
     document.getElementById("invEmpty").textContent=empty;
-    const maxVal=Math.max(1,...activeProducts().map(p=>(sm[p.id]||0)*p.pricePerKg));
-    const rows=activeProducts().filter(p=>!q||p.name.toLocaleLowerCase("tr").includes(q))
-      .sort((a,b)=>a.name.localeCompare(b.name,"tr")).map(p=>{
-        const s=sm[p.id]||0, val=s*p.pricePerKg, w=Math.max(2,(val/maxVal)*100);
-        return `<div class="invrow"><div class="nm"><b>${esc(p.name)}</b>
-          <span>${p.pricePerKg>0?numFR(p.pricePerKg,2)+" ₺/kg":"prix non renseigné"} · unité ${kg(p.pkgKg)} kg</span>
-          <div class="bar"><i style="width:${w}%"></i></div></div>
-          <div class="kg">${kg(s)} kg<small>${money(val)}</small></div></div>`; }).join("");
+    document.getElementById("leadInv").textContent=fini?"Produits finis : unités en stock et valeur (prix unitaire).":"Matières premières : quantités en kg et valeur (prix au kilo).";
+    const maxVal=Math.max(1,...activeProducts(st).map(p=>valueOf(p,sm[p.id]||0)));
+    const rows=activeProducts(st).filter(p=>!q||p.name.toLocaleLowerCase("tr").includes(q)).sort((a,b)=>a.name.localeCompare(b.name,"tr")).map(p=>{
+      const s=sm[p.id]||0, val=valueOf(p,s), w=Math.max(2,(val/maxVal)*100);
+      const priceTxt=fini?(numFR(p.unitPrice||0,2)+" ₺/u"):((p.pricePerKg>0?numFR(p.pricePerKg,2)+" ₺/kg":"prix —"));
+      return `<div class="invrow"><div class="nm"><b>${esc(p.name)}</b><span>${priceTxt}</span>
+        <div class="bar"><i style="width:${w}%"></i></div></div>
+        <div class="kg">${fini?numFR(s,0)+" u":kg(s)+" kg"}<small>${money(val)}</small></div></div>`; }).join("");
     document.getElementById("invList").innerHTML=rows||`<div class="empty">Aucun produit.</div>`;
   },
 
   // ---------- RAPPORT ----------
   renderRep(){
-    const dEl=document.getElementById("repDate"); if(!dEl.value) dEl.value=todayStr(); const date=dEl.value;
-    document.getElementById("repNotice").innerHTML="";
-    const mv=activeMovements().filter(m=>m.date===date);
-    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; if(m.kg>=0) e.in+=m.kg; else e.out+=-m.kg; });
+    const st=repStock, fini=st==="fini", dEl=document.getElementById("repDate"); if(!dEl.value) dEl.value=todayStr(); const date=dEl.value;
+    document.getElementById("leadRep").textContent=(fini?"Produits finis":"Matières premières")+" — variation du jour, uniquement les produits ayant bougé.";
+    const mv=activeMovements().filter(m=>m.stock===st&&m.date===date);
+    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; const v=fini?Math.abs(m.n):Math.abs(m.kg);
+      if(m.kind==="in") e.in+=v; else if(m.kind==="out") e.out+=v; else { if((fini?m.n:m.kg)>=0) e.in+=v; else e.out+=v; } });
     const ids=Object.keys(map); let tIn=0,tOut=0; ids.forEach(id=>{ tIn+=map[id].in; tOut+=map[id].out; });
-    document.getElementById("repIn").innerHTML=kg(tIn)+"<small> kg</small>";
-    document.getElementById("repOut").innerHTML=kg(tOut)+"<small> kg</small>";
-    const net=tIn-tOut; document.getElementById("repNet").innerHTML=(net>=0?"+":"−")+kg(Math.abs(net))+"<small> kg</small>";
+    const u=fini?" u":" kg", fmt=v=>fini?numFR(v,0):kg(v);
+    document.getElementById("repIn").innerHTML=fmt(tIn)+"<small>"+u+"</small>";
+    document.getElementById("repOut").innerHTML=fmt(tOut)+"<small>"+u+"</small>";
+    const net=tIn-tOut; document.getElementById("repNet").innerHTML=(net>=0?"+":"−")+fmt(Math.abs(net))+"<small>"+u+"</small>";
     if(!ids.length){ document.getElementById("repList").innerHTML=`<div class="empty">Aucun mouvement le ${frDate(date)}.</div>`; return; }
     const head=`<div class="rrow head"><div>Produit</div><div class="rin">Entrée</div><div class="rout">Sortie</div><div class="rnet">Net</div></div>`;
     const rows=ids.sort((a,b)=>(map[b].in+map[b].out)-(map[a].in+map[a].out)).map(id=>{ const p=prod(id); if(!p) return "";
       const m=map[id], n=m.in-m.out;
       return `<div class="rrow"><div class="rname">${esc(p.name)}</div>
-        <div class="rin">${m.in?("+"+kg(m.in)):"—"}</div><div class="rout">${m.out?("−"+kg(m.out)):"—"}</div>
-        <div class="rnet" style="color:${n>=0?'var(--in-deep)':'var(--out-deep)'}">${n>=0?"+":"−"}${kg(Math.abs(n))}</div></div>`; }).join("");
+        <div class="rin">${m.in?("+"+fmt(m.in)):"—"}</div><div class="rout">${m.out?("−"+fmt(m.out)):"—"}</div>
+        <div class="rnet" style="color:${n>=0?'var(--in-deep)':'var(--out-deep)'}">${n>=0?"+":"−"}${fmt(Math.abs(n))}</div></div>`; }).join("");
     document.getElementById("repList").innerHTML=head+rows;
   },
   printReport(){
-    const date=document.getElementById("repDate").value||todayStr();
-    const mv=activeMovements().filter(m=>m.date===date);
-    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; if(m.kg>=0) e.in+=m.kg; else e.out+=-m.kg; });
-    const ids=Object.keys(map);
-    let body=ids.map(id=>{ const p=prod(id), m=map[id], n=m.in-m.out;
-      return `<tr><td>${esc(p?p.name:id)}</td><td style="text-align:right;color:#2c6">${m.in?"+"+kg(m.in):"—"}</td>
-      <td style="text-align:right;color:#a42">${m.out?"−"+kg(m.out):"—"}</td><td style="text-align:right;font-weight:700">${n>=0?"+":"−"}${kg(Math.abs(n))}</td></tr>`; }).join("");
+    const st=repStock, fini=st==="fini", date=document.getElementById("repDate").value||todayStr();
+    const mv=activeMovements().filter(m=>m.stock===st&&m.date===date);
+    const map={}; mv.forEach(m=>{ const e=map[m.productId]=map[m.productId]||{in:0,out:0}; const v=fini?Math.abs(m.n):Math.abs(m.kg);
+      if(m.kind==="in") e.in+=v; else if(m.kind==="out") e.out+=v; else { if((fini?m.n:m.kg)>=0) e.in+=v; else e.out+=v; } });
+    const fmt=v=>fini?numFR(v,0):kg(v), un=fini?"unités":"kg";
+    let body=Object.keys(map).map(id=>{ const p=prod(id), m=map[id], n=m.in-m.out;
+      return `<tr><td>${esc(p?p.name:id)}</td><td style="text-align:right;color:#2c6">${m.in?"+"+fmt(m.in):"—"}</td><td style="text-align:right;color:#a42">${m.out?"−"+fmt(m.out):"—"}</td><td style="text-align:right;font-weight:700">${n>=0?"+":"−"}${fmt(Math.abs(n))}</td></tr>`; }).join("");
     if(!body) body=`<tr><td colspan="4" style="text-align:center;color:#999;padding:20px">Aucun mouvement</td></tr>`;
     const w=window.open("","_blank"); if(!w){ toast("Autorisez l'ouverture de fenêtre"); return; }
-    w.document.write(`<html><head><title>Rapport ${date}</title><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:18px}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}th,td{padding:7px 8px;border-bottom:1px solid #ddd}th{text-align:left;background:#f3f0ea}</style></head><body><h1>Rapport de stock — ${frDate(date)}</h1><table><thead><tr><th>Produit</th><th style="text-align:right">Entrée (kg)</th><th style="text-align:right">Sortie (kg)</th><th style="text-align:right">Net (kg)</th></tr></thead><tbody>${body}</tbody></table></body></html>`);
+    w.document.write(`<html><head><title>Rapport ${date}</title><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:17px}h2{font-size:13px;color:#666;font-weight:normal;margin-top:2px}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}th,td{padding:7px 8px;border-bottom:1px solid #ddd}th{text-align:left;background:#f3f0ea}</style></head><body><h1>Rapport ${fini?"Produits finis":"Matières premières"} — ${frDate(date)}</h1><h2>Quantités en ${un}</h2><table><thead><tr><th>Produit</th><th style="text-align:right">Entrée</th><th style="text-align:right">Sortie</th><th style="text-align:right">Net</th></tr></thead><tbody>${body}</tbody></table></body></html>`);
     w.document.close(); setTimeout(()=>w.print(),350);
   },
 
@@ -825,17 +868,17 @@ const App={
       document.getElementById("admPass").value=""; this.renderAdmin(); } else toast("Code incorrect"); },
   renderAdmin(){
     if(!unlocked){ document.getElementById("admGate").style.display="block"; document.getElementById("admPanel").style.display="none"; return; }
-    const sm=stockMap();
-    document.getElementById("admList").innerHTML=activeProducts().map(p=>`
-      <div class="adrow"><div class="ai"><b>${esc(p.name)}</b>
-        <span>${p.pricePerKg>0?numFR(p.pricePerKg,2)+" ₺/kg":"prix —"} · format ${kg(p.pkgKg)} kg · stock ${kg(sm[p.id]||0)} kg</span></div>
+    const fini=admStock==="fini", sm=stockMap();
+    document.getElementById("leadAdm").textContent=fini?"Produits finis : nom (avec grammage) et prix à l'unité.":"Matières premières : prix au kilo et format d'unité.";
+    document.getElementById("admList").innerHTML=activeProducts(admStock).map(p=>{
+      const info=fini?`${numFR(p.unitPrice||0,2)} ₺/u · stock ${numFR(sm[p.id]||0,0)} u`:`${p.pricePerKg>0?numFR(p.pricePerKg,2)+" ₺/kg":"prix —"} · format ${kg(p.pkgKg)} kg · stock ${kg(sm[p.id]||0)} kg`;
+      return `<div class="adrow"><div class="ai"><b>${esc(p.name)}</b><span>${info}</span></div>
         <button class="icon-b" onclick="App.editProduct('${p.id}')">✏️</button>
-        <button class="icon-b del" onclick="App.deleteProduct('${p.id}')">🗑️</button></div>`).join("");
+        <button class="icon-b del" onclick="App.deleteProduct('${p.id}')">🗑️</button></div>`; }).join("");
     this.renderSync();
   },
   renderSync(){
-    const box=document.getElementById("syncBox"); if(!box) return;
-    let dot="off",label;
+    const box=document.getElementById("syncBox"); if(!box) return; let dot="off",label;
     if(!SC.url){ dot="off"; label="Non configurée"; }
     else if(syncing){ dot="busy"; label="Synchronisation en cours…"; }
     else if(SC.lastError){ dot="err"; label="Erreur : "+esc(SC.lastError); }
@@ -843,123 +886,104 @@ const App={
     else if(SC.lastSync){ dot="ok"; label="À jour — dernière synchro "+hhmm(SC.lastSync); }
     else { dot="ok"; label="Prête"; }
     const pc=pendingCount();
-    box.innerHTML=`<div class="synccard">
-      <div class="syncstat"><span class="sdot ${dot}"></span>${label}</div>
-      <div class="syncsub">${pc>0?(pc+" saisie(s) en attente d'envoi. "):""}Les 3 téléphones doivent utiliser la même adresse.</div>
-      <input class="syncin" id="syncUrl" placeholder="https://votre-projet-default-rtdb.firebasedatabase.app" value="${attr(SC.url)}">
-      <div class="btn-row" style="margin-top:0">
-        <button class="btn btn-ghost" onclick="App.saveSyncUrl()">Enregistrer l'adresse</button>
-        <button class="btn btn-dark" onclick="App.syncManual()">🔄 Synchroniser</button>
-      </div>
-      <div class="toggle">Synchronisation automatique
-        <div class="sw ${SC.auto?'on':''}" onclick="App.toggleAuto()"><i></i></div></div>
+    box.innerHTML=`<div class="synccard"><div class="syncstat"><span class="sdot ${dot}"></span>${label}</div>
+      <div class="syncsub">${pc>0?(pc+" en attente d'envoi. "):""}Les 3 téléphones doivent utiliser la même adresse.</div>
+      <input class="syncin" id="syncUrl" placeholder="https://...firebasedatabase.app" value="${attr(SC.url)}">
+      <div class="btn-row" style="margin-top:0"><button class="btn btn-ghost" onclick="App.saveSyncUrl()">Enregistrer l'adresse</button>
+        <button class="btn btn-dark" onclick="App.syncManual()">🔄 Synchroniser</button></div>
+      <div class="toggle">Synchronisation automatique<div class="sw ${SC.auto?'on':''}" onclick="App.toggleAuto()"><i></i></div></div>
       <button class="btn btn-danger" style="margin-top:10px" onclick="App.makeAuthoritative()">⚠️ Remplacer la base en ligne par cet appareil</button>
-      <div class="syncsub" style="margin-top:8px">À n'utiliser qu'en cas de doublons : efface la base en ligne et y renvoie uniquement les données de cet appareil.</div>
-    </div>`;
+      <div class="syncsub" style="margin-top:8px">En cas de doublons : vide la base en ligne et y renvoie uniquement les données de cet appareil.</div></div>`;
   },
-  makeAuthoritative(){
-    if(!SC.url){ toast("Configurez d'abord l'adresse"); return; }
-    openSheet(`<h3>Remplacer la base en ligne ?</h3>
-      <div class="sub">La base Firebase sera <b>vidée</b> puis remplie avec les données <b>de cet appareil uniquement</b> (${activeProducts().length} produits). Les autres téléphones devront ensuite refaire « Récupérer » (Réinitialiser puis synchroniser). À faire depuis l'appareil qui a les bonnes données.</div>
-      <div class="btn-row"><button class="btn btn-ghost" onclick="window._maC()">Annuler</button>
-      <button class="btn btn-danger" onclick="window._maO()">Oui, remplacer</button></div>`,false);
-    window._maC=closeSheet;
-    window._maO=async ()=>{ closeSheet();
-      if(syncing) return; syncing=true; D._seed=false; SC.lastError=""; setSyncStatus();
-      try{
-        await putJSON(normUrl(SC.url)+"/.json", { products:D.products, movements:D.movements });
-        SC.dirty={products:{},movements:{}}; SC.lastSync=now(); SC.lastError=""; saveSync(); save();
-        syncing=false; setSyncStatus(); App.renderAll(); toast("Base en ligne remplacée");
-      }catch(e){ syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus(); toast("Échec : "+SC.lastError); }
-    };
-  },
-  saveSyncUrl(){ const v=document.getElementById("syncUrl").value; SC.url=normUrl(v); SC.lastError=""; saveSync();
-    toast(SC.url?"Adresse enregistrée":"Adresse effacée"); this.renderSync(); if(SC.url) syncNow(true); },
+  saveSyncUrl(){ SC.url=normUrl(document.getElementById("syncUrl").value); SC.lastError=""; saveSync(); toast(SC.url?"Adresse enregistrée":"Adresse effacée"); this.renderSync(); if(SC.url) syncNow(true); },
   syncManual(){ const el=document.getElementById("syncUrl"); if(el){ const v=normUrl(el.value); if(v!==SC.url){ SC.url=v; saveSync(); } } syncNow(true); },
   toggleAuto(){ SC.auto=!SC.auto; saveSync(); this.renderSync(); if(SC.auto) syncNow(false); },
+  makeAuthoritative(){
+    if(!SC.url){ toast("Configurez d'abord l'adresse"); return; }
+    openSheet(`<h3>Remplacer la base en ligne ?</h3><div class="sub">La base Firebase sera <b>vidée</b> puis remplie avec les données <b>de cet appareil uniquement</b>. À faire depuis l'appareil qui a les bonnes données. Les autres devront ensuite « Réinitialiser » puis synchroniser.</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-danger" onclick="window._maO()">Oui, remplacer</button></div>`,false);
+    window._maO=async ()=>{ closeSheet(); if(syncing) return; syncing=true; D._seed=false; SC.lastError=""; setSyncStatus();
+      try{ await putJSON(normUrl(SC.url)+"/.json",{ products:D.products, movements:D.movements });
+        SC.dirty={products:{},movements:{}}; SC.lastSync=now(); saveSync(); save(); syncing=false; setSyncStatus(); App.renderAll(); toast("Base en ligne remplacée");
+      }catch(e){ syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus(); toast("Échec : "+SC.lastError); } };
+  },
 
-  editProduct(id){ const p=prod(id);
-    openSheet(`<h3>Modifier le produit</h3><div class="sub">Prix d'achat, format d'unité et correction de stock.</div>
-      <div class="ed-field"><label>Nom</label><input id="epName" value="${attr(p.name)}"></div>
-      <div class="ed-field"><label>Prix d'achat (₺/kg)</label><input id="epPrice" inputmode="decimal" value="${p.pricePerKg||""}"></div>
-      <div class="ed-field"><label>Poids d'une unité en production (kg)</label><input id="epPkg" inputmode="decimal" value="${p.pkgKg}"></div>
-      <div class="ed-field"><label>Stock actuel (kg) — correction</label><input id="epStock" inputmode="decimal" value="${stockOf(id)}"></div>
-      <div class="btn-row"><button class="btn btn-ghost" onclick="window._epCancel()">Annuler</button>
-      <button class="btn btn-dark" onclick="window._epSave()">Enregistrer</button></div>`,false);
-    window._epCancel=closeSheet;
-    window._epSave=()=>{ const nm=document.getElementById("epName").value.trim(); if(!nm){ toast("Nom requis"); return; }
-      p.name=nm; p.pricePerKg=Math.max(0,parseNum(document.getElementById("epPrice").value)||0);
-      p.pkgKg=Math.max(0.001,parseNum(document.getElementById("epPkg").value)||5);
+  editProduct(id){ const p=prod(id), fini=isFini(p);
+    openSheet(`<h3>Modifier le produit</h3><div class="sub">${fini?"Produit fini":"Matière première"}</div>
+      <div class="ed-field"><label>Nom${fini?" (avec grammage)":""}</label><input id="eN" value="${attr(p.name)}"></div>
+      ${fini?`<div class="ed-field"><label>Prix unitaire (₺/u)</label><input id="ePr" inputmode="decimal" value="${p.unitPrice||""}"></div>`
+            :`<div class="ed-field"><label>Prix d'achat (₺/kg)</label><input id="ePr" inputmode="decimal" value="${p.pricePerKg||""}"></div>
+              <div class="ed-field"><label>Poids d'une unité (kg)</label><input id="ePk" inputmode="decimal" value="${p.pkgKg}"></div>`}
+      <div class="ed-field"><label>Stock actuel ${fini?"(unités)":"(kg)"} — correction</label><input id="eSt" inputmode="decimal" value="${fini?numFR(stockOf(id),0):stockOf(id)}"></div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._ep()">Enregistrer</button></div>`,false);
+    window._ep=()=>{ const nm=document.getElementById("eN").value.trim(); if(!nm){ toast("Nom requis"); return; } p.name=nm;
+      if(fini){ p.unitPrice=Math.max(0,parseNum(document.getElementById("ePr").value)||0); }
+      else { p.pricePerKg=Math.max(0,parseNum(document.getElementById("ePr").value)||0); p.pkgKg=Math.max(0.001,parseNum(document.getElementById("ePk").value)||5); }
       touchProduct(id);
-      const target=Math.max(0,parseNum(document.getElementById("epStock").value)||0), cur=stockOf(id), delta=r3(target-cur);
-      if(delta!==0) pushMovement({type:"adj",productId:id,kg:delta,note:"Correction admin",date:todayStr()});
+      const target=Math.max(0,parseNum(document.getElementById("eSt").value)||0), cur=stockOf(id), delta=r3(target-cur);
+      if(delta!==0){ if(fini) pushMovement({stock:"fini",kind:"adj",productId:id,n:delta,date:todayStr(),note:"Correction"}); else pushMovement({stock:"matiere",kind:"adj",productId:id,kg:delta,date:todayStr(),note:"Correction"}); }
       save(); closeSheet(); toast("Produit mis à jour"); App.renderAll(); };
   },
   deleteProduct(id){ const p=prod(id);
-    openSheet(`<h3>Supprimer ce produit ?</h3><div class="sub">« ${esc(p.name)} » sera retiré de la liste sur tous les téléphones synchronisés.</div>
-      <div class="btn-row"><button class="btn btn-ghost" onclick="window._dCancel()">Annuler</button>
-      <button class="btn btn-danger" onclick="window._dOk()">Supprimer</button></div>`,false);
-    window._dCancel=closeSheet;
-    window._dOk=()=>{ p.deleted=true; p.updatedAt=now(); markDirty("products",id); save(); closeSheet(); toast("Produit supprimé"); App.renderAll(); };
+    openSheet(`<h3>Supprimer ce produit ?</h3><div class="sub">« ${esc(p.name)} » sera retiré de la liste sur tous les téléphones.</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-danger" onclick="window._del()">Supprimer</button></div>`,false);
+    window._del=()=>{ p.deleted=true; p.updatedAt=now(); markDirty("products",id); save(); closeSheet(); toast("Produit supprimé"); App.renderAll(); };
   },
-  addProductPrompt(){
-    openSheet(`<h3>Nouveau produit</h3><div class="sub">Il apparaîtra sur les 3 téléphones après synchro.</div>
-      <div class="ed-field"><label>Nom du produit</label><input id="npName" placeholder="ex. KAVRULMUŞ FISTIK" autofocus></div>
-      <div class="ed-field"><label>Prix d'achat (₺/kg) — optionnel</label><input id="npPrice" inputmode="decimal" placeholder="0"></div>
-      <div class="ed-field"><label>Poids d'une unité (kg)</label><input id="npPkg" inputmode="decimal" value="5"></div>
-      <div class="btn-row"><button class="btn btn-ghost" onclick="window._npCancel()">Annuler</button>
-      <button class="btn btn-dark" onclick="window._npSave()">Ajouter</button></div>`,false);
-    window._npCancel=closeSheet;
-    window._npSave=()=>{ const nm=document.getElementById("npName").value.trim(); if(!nm){ toast("Indiquez un nom"); return; }
-      const id=uid(); D.products[id]={ id, name:nm, pricePerKg:Math.max(0,parseNum(document.getElementById("npPrice").value)||0),
-        pkgKg:Math.max(0.001,parseNum(document.getElementById("npPkg").value)||5), initialKg:0, order:nextOrder(), updatedAt:now(), deleted:false };
+  addProductPrompt(){ const fini=admStock==="fini"||curTab==="out";
+    openSheet(`<h3>Nouveau produit ${fini?"fini":"matière"}</h3><div class="sub">Il apparaîtra sur les 3 téléphones après synchro.</div>
+      <div class="ed-field"><label>Nom${fini?" (avec grammage, ex. BADEM 250 g)":""}</label><input id="nN" autofocus></div>
+      ${fini?`<div class="ed-field"><label>Prix unitaire (₺/u)</label><input id="nPr" inputmode="decimal" placeholder="0"></div>`
+            :`<div class="ed-field"><label>Prix d'achat (₺/kg) — optionnel</label><input id="nPr" inputmode="decimal" placeholder="0"></div>
+              <div class="ed-field"><label>Poids d'une unité (kg)</label><input id="nPk" inputmode="decimal" value="5"></div>`}
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._np()">Ajouter</button></div>`,false);
+    window._np=()=>{ const nm=document.getElementById("nN").value.trim(); if(!nm){ toast("Indiquez un nom"); return; } const id=uid();
+      if(fini){ D.products[id]={ id, name:nm, stock:"fini", unitPrice:Math.max(0,parseNum(document.getElementById("nPr").value)||0), initialUnits:0, order:nextOrder(), updatedAt:now(), deleted:false }; }
+      else { D.products[id]={ id, name:nm, stock:"matiere", pricePerKg:Math.max(0,parseNum(document.getElementById("nPr").value)||0), pkgKg:Math.max(0.001,parseNum(document.getElementById("nPk").value)||5), initialKg:0, order:nextOrder(), updatedAt:now(), deleted:false }; }
       markDirty("products",id); save(); closeSheet(); toast("Produit ajouté : "+nm); App.renderAll(); };
   },
   changePass(){
     openSheet(`<h3>Changer le code</h3><div class="sub">Le code reste propre à cet appareil.</div>
-      <div class="ed-field"><label>Code actuel</label><input id="cpOld" inputmode="numeric" type="password"></div>
-      <div class="ed-field"><label>Nouveau code</label><input id="cpNew" inputmode="numeric" type="password"></div>
-      <div class="btn-row"><button class="btn btn-ghost" onclick="window._cpCancel()">Annuler</button>
-      <button class="btn btn-dark" onclick="window._cpSave()">Valider</button></div>`,false);
-    window._cpCancel=closeSheet;
-    window._cpSave=()=>{ if(document.getElementById("cpOld").value!==D.settings.adminPass){ toast("Code actuel incorrect"); return; }
-      const nv=document.getElementById("cpNew").value.trim(); if(nv.length<3){ toast("Code trop court"); return; }
+      <div class="ed-field"><label>Code actuel</label><input id="cO" inputmode="numeric" type="password"></div>
+      <div class="ed-field"><label>Nouveau code</label><input id="cN" inputmode="numeric" type="password"></div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._cp()">Valider</button></div>`,false);
+    window._cp=()=>{ if(document.getElementById("cO").value!==D.settings.adminPass){ toast("Code actuel incorrect"); return; }
+      const nv=document.getElementById("cN").value.trim(); if(nv.length<3){ toast("Code trop court"); return; }
       D.settings.adminPass=nv; save(); closeSheet(); toast("Code modifié"); };
   },
   exportJSON(){ const blob=new Blob([JSON.stringify(D,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob);
     const a=document.createElement("a"); a.href=url; a.download="stock_"+todayStr()+".json"; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000); toast("Données exportées"); },
   importJSON(ev){ const f=ev.target.files[0]; if(!f) return; const r=new FileReader();
-    r.onload=()=>{ try{ let obj=JSON.parse(r.result);
-        if(obj.receptions&&!obj.movements) obj=migrateV1(obj); // accepte un ancien export
-        if(!obj.products) throw new Error("format");
+    r.onload=()=>{ try{ let obj=JSON.parse(r.result); if(obj.receptions&&!obj.movements) obj=migrateV1(obj); if(!obj.products) throw new Error("format");
         openSheet(`<h3>Importer ces données ?</h3><div class="sub">${Object.keys(obj.products).length} produits · ${Object.keys(obj.movements||{}).length} mouvements.<br>Remplace les données de cet appareil (puis fusionne à la prochaine synchro).</div>
-          <div class="btn-row"><button class="btn btn-ghost" onclick="window._iC()">Annuler</button>
-          <button class="btn btn-dark" onclick="window._iO()">Remplacer</button></div>`,false);
+          <div class="btn-row"><button class="btn btn-ghost" onclick="window._iC()">Annuler</button><button class="btn btn-dark" onclick="window._iO()">Remplacer</button></div>`,false);
         window._iC=()=>{ closeSheet(); ev.target.value=""; };
-        window._iO=()=>{ D=obj; if(!D.settings) D.settings={adminPass:"1234"}; if(!D.movements) D.movements={}; D._seed=false; save(); closeSheet(); ev.target.value=""; toast("Données importées"); App.renderAll(); };
+        window._iO=()=>{ D=obj; if(!D.settings) D.settings={adminPass:"1234",validUntil:{}}; if(!D.movements) D.movements={}; D._seed=false; ensureSchema(); save(); closeSheet(); ev.target.value=""; toast("Données importées"); App.renderAll(); };
       }catch(e){ toast("Fichier JSON invalide"); ev.target.value=""; } };
     r.readAsText(f); },
   resetAll(){
-    openSheet(`<h3>Réinitialiser cet appareil ?</h3><div class="sub">Efface les données locales et restaure les 26 produits. La base en ligne n'est pas effacée : une synchro la re-téléchargera.</div>
-      <div class="btn-row"><button class="btn btn-ghost" onclick="window._rC()">Annuler</button>
-      <button class="btn btn-danger" onclick="window._rO()">Tout effacer</button></div>`,false);
-    window._rC=closeSheet;
-    window._rO=()=>{ D=freshData(); SC.dirty={products:{},movements:{}}; save(); saveSync(); closeSheet(); toast("Réinitialisé"); App.renderAll(); };
+    openSheet(`<h3>Réinitialiser cet appareil ?</h3><div class="sub">Efface les données locales et restaure les catalogues par défaut. La base en ligne n'est pas effacée : une synchro la re-téléchargera.</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-danger" onclick="window._ro()">Tout effacer</button></div>`,false);
+    window._ro=()=>{ D=freshData(); SC.dirty={products:{},movements:{}}; ensureSchema(); save(); saveSync(); closeSheet(); toast("Réinitialisé"); App.renderAll(); };
   }
 };
 
-// ---------- bascule réseau / horloge de synchro ----------
+window.closeSheet=closeSheet;
 window.addEventListener("online",()=>{ online=true; setSyncStatus(); syncNow(false); });
 window.addEventListener("offline",()=>{ online=false; setSyncStatus(); });
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden) syncTick(); });
 setInterval(syncTick,12000);
 
-// ---------- init ----------
 load();
 document.getElementById("workDate").value=todayStr();
 document.getElementById("repDate").value=todayStr();
-document.getElementById("workDate").addEventListener("change",()=>App.renderGrids());
+document.getElementById("workDate").addEventListener("change",()=>{ if(curTab==="in") App.renderRec(); else if(curTab==="out") App.renderPro(); });
 window.App=App;
 App.go("in");
 if(SC.url) setTimeout(()=>syncNow(false),600);
