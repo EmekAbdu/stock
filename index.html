@@ -332,7 +332,10 @@
       <div id="admList"></div>
       <button class="btn btn-ghost" style="margin-top:6px" onclick="App.addProductPrompt()">＋ Ajouter un produit</button>
 
-      <div class="section-title">Synchronisation (3 téléphones)</div>
+      <div class="section-title">Sécurité & appareils</div>
+      <div id="govBox"></div>
+
+      <div class="section-title">Synchronisation</div>
       <div id="syncBox"></div>
 
       <div class="section-title">Données</div>
@@ -342,15 +345,28 @@
       </div>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="App.importJSON(event)">
 
-      <div class="section-title">Sécurité</div>
+      <div class="section-title">Code admin</div>
       <div class="btn-row">
-        <button class="btn btn-ghost" onclick="App.changePass()">Changer le code</button>
-        <button class="btn btn-danger" onclick="App.resetAll()">Réinitialiser</button>
+        <button class="btn btn-ghost" onclick="App.changePass()">Changer le code admin</button>
+        <button class="btn btn-danger" id="resetBtn" onclick="App.resetAll()">Réinitialiser</button>
       </div>
-      <p class="lead" style="margin-top:20px;text-align:center">Gestion de Stock · fonctionne hors-ligne · synchro Firebase.</p>
+      <p class="lead" style="margin-top:20px;text-align:center">Gestion de Stock · synchro Firebase.</p>
     </div>
   </section>
 </main>
+
+<!-- Écran d'installation (porte) -->
+<div id="enrollGate" style="display:none;position:fixed;inset:0;z-index:200;background:var(--paper);overflow:auto;padding:30px 22px calc(30px + env(safe-area-inset-bottom))">
+  <div style="max-width:420px;margin:0 auto">
+    <div style="text-align:center;margin-bottom:8px"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 5px rgba(202,166,74,.18)"></span></div>
+    <h2 id="enrTitle" style="text-align:center;font-size:22px;font-weight:800;margin:6px 0 2px">Installation</h2>
+    <p class="lead" id="enrLead" style="text-align:center">Cette application est réservée. Entrez le code d'installation fourni par l'administrateur et votre nom.</p>
+    <div class="ed-field" id="enrCodeField"><label>Code d'installation</label><input id="enrCode" inputmode="text" type="password" placeholder="••••"></div>
+    <div class="ed-field"><label>Votre nom</label><input id="enrName" placeholder="ex. Abdou, comptable, responsable…"></div>
+    <button class="btn btn-dark" onclick="App.doEnroll()">Installer</button>
+    <p class="lead" id="enrMsg" style="text-align:center;margin-top:14px"></p>
+  </div>
+</div>
 
 <div class="ov" id="ov"><div class="sheet" id="ovSheet"></div></div>
 <div id="toast"></div>
@@ -366,6 +382,7 @@
 "use strict";
 (function(){
 const KEY="gestionStock_v2", OLD_KEY="gestionStock_v1", SYNC_KEY="gestionStock_sync";
+const DEFAULT_SYNC_URL="https://balensa-gestion-stock-default-rtdb.europe-west1.firebasedatabase.app";
 
 const DEFAULT_PRODUCTS=[
   "ANTEP FISTIĞI","BADEM","BAHARATLI ÇEKİRDEK","BEYAZ NOHUT","ÇAKIL TAŞI",
@@ -425,6 +442,22 @@ function frDate(iso){ if(!iso) return ""; const [y,m,d]=iso.split("-");
   const mois=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
   return `${parseInt(d,10)} ${mois[parseInt(m,10)-1]} ${y}`; }
 function hhmm(ts){ if(!ts) return ""; const d=new Date(ts); return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
+function ago(ts){ if(!ts) return "jamais"; const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return "à l'instant"; const mn=Math.floor(s/60); if(mn<60) return "il y a "+mn+" min";
+  const h=Math.floor(mn/60); if(h<24) return "il y a "+h+" h"; const j=Math.floor(h/24); return "il y a "+j+" j"; }
+function dts(ts){ if(!ts) return "—"; return frDate(new Date(ts-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10)); }
+function describeMovement(m){
+  if(m.stock==="matiere"){
+    if(m.kind==="in") return "Réception +"+kg(Math.abs(m.kg))+" kg ("+m.qty+"×"+kg(m.pkgSize)+")";
+    if(m.kind==="out") return "Sortie matière −"+kg(Math.abs(m.kg))+" kg";
+    return "Correction matière "+(m.kg>=0?"+":"−")+kg(Math.abs(m.kg))+" kg";
+  }
+  if(m.kind==="in") return "Production +"+Math.abs(m.n)+" u";
+  if(m.kind==="load") return "Chargé "+Math.abs(m.n)+" u → "+(DRIVERS[m.driver]||"?");
+  if(m.kind==="vin") return "Stock véhicule +"+Math.abs(m.n)+" u → "+(DRIVERS[m.driver]||"?");
+  if(m.kind==="out") return "Sortie fini −"+Math.abs(m.n)+" u";
+  return "Correction fini "+(m.n>=0?"+":"−")+Math.abs(m.n)+" u";
+}
 
 // ---------- modèle ----------
 function prod(id){ return D.products[id]; }
@@ -476,6 +509,8 @@ function ensureSchema(){
   Object.values(D.movements).forEach(m=>{ if(!m.stock) m.stock="matiere";
     if(!m.kind) m.kind=(m.type==="rec"?"in":m.type==="pro"?"out":m.type==="adj"?"adj":"in"); });
   if(!D.settings.validUntil) D.settings.validUntil={};
+  if(!D.config) D.config={ enrollCode:"", adminDeviceId:"", updatedAt:0 };
+  if(!D.devices) D.devices={};
   seedFiniIfMissing();
 }
 function seedFiniIfMissing(){
@@ -492,17 +527,37 @@ function load(){
   if(!D.settings) D.settings={adminPass:"1234",validUntil:{}};
   if(!D.movements) D.movements={};
   if(typeof D._seed!=="boolean") D._seed=false;
-  try{ SC=JSON.parse(localStorage.getItem(SYNC_KEY)); }catch(e){ SC=null; }
-  if(!SC) SC={ url:"", auto:true, lastSync:0, lastError:"", dirty:{products:{},movements:{}} };
-  if(!SC.dirty) SC.dirty={products:{},movements:{}};
+  const hadSC=localStorage.getItem(SYNC_KEY);
+  try{ SC=hadSC?JSON.parse(hadSC):null; }catch(e){ SC=null; }
+  if(!SC) SC={ url:"", auto:true, lastSync:0, lastError:"", dirty:{products:{},movements:{},devices:{}} };
+  if(!SC.dirty) SC.dirty={products:{},movements:{},devices:{}};
+  if(!SC.dirty.devices) SC.dirty.devices={};
+  if(!SC.deviceId) SC.deviceId="dev"+uid()+uid();
+  if(!SC.url) SC.url=DEFAULT_SYNC_URL;            // adresse intégrée : connexion automatique
+  if(typeof SC.enrolled!=="boolean") SC.enrolled = hadSC?true:false;  // appareils déjà en service = enrôlés
+  if(!SC.role) SC.role="user";
+  if(SC.deviceName===undefined) SC.deviceName="";
+  saveSync();
   ensureSchema();
 }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(D)); }catch(e){ toast("Erreur d'enregistrement"); } scheduleAutoPush(); }
 function saveSync(){ try{ localStorage.setItem(SYNC_KEY,JSON.stringify(SC)); }catch(e){} }
 function markDirty(coll,id){ D._seed=false; SC.dirty[coll][id]=true; saveSync(); }
-function pendingCount(){ return Object.keys(SC.dirty.products).length+Object.keys(SC.dirty.movements).length; }
+function markConfigDirty(){ D.config.updatedAt=now(); SC.dirtyConfig=true; saveSync(); }
+function isAdminDevice(){ return D.config.adminDeviceId && D.config.adminDeviceId===SC.deviceId; }
+function pendingCount(){ return Object.keys(SC.dirty.products).length+Object.keys(SC.dirty.movements).length+Object.keys(SC.dirty.devices||{}).length; }
 
-function pushMovement(o){ o.id=uid(); o.ts=now(); o.updatedAt=now(); o.deleted=false; D.movements[o.id]=o; markDirty("movements",o.id); save(); }
+function registerDevice(){
+  const ex=D.devices[SC.deviceId]||{};
+  D.devices[SC.deviceId]={ deviceId:SC.deviceId, name:SC.deviceName||"(sans nom)", role:SC.role||"user",
+    enrolledAt:ex.enrolledAt||now(), lastSeen:now(), updatedAt:now(), deleted:false };
+  SC.dirty.devices[SC.deviceId]=true; saveSync();
+}
+function bumpLastSeen(){ if(!SC.enrolled) return; const t=now();
+  if(t-(SC._seenAt||0)<60000) return; SC._seenAt=t;
+  const d=D.devices[SC.deviceId]; if(d){ d.lastSeen=t; d.updatedAt=t; SC.dirty.devices[SC.deviceId]=true; saveSync(); } }
+
+function pushMovement(o){ o.id=uid(); o.ts=now(); o.updatedAt=now(); o.deleted=false; o.by=SC.deviceName||""; D.movements[o.id]=o; markDirty("movements",o.id); bumpLastSeen(); save(); }
 function softDeleteMovement(id){ const m=D.movements[id]; if(m){ m.deleted=true; m.updatedAt=now(); markDirty("movements",id); save(); } }
 function touchProduct(id){ const p=prod(id); if(p){ p.updatedAt=now(); markDirty("products",id); } }
 
@@ -575,18 +630,23 @@ async function syncNow(manual){
   if(!SC.url){ if(manual) toast("Indiquez d'abord l'adresse"); setSyncStatus(); return; }
   if(syncing) return; syncing=true; SC.lastError=""; setSyncStatus();
   try{
-    const [rp,rm]=await Promise.all([ fetchJSON(ep("products")), fetchJSON(ep("movements")) ]);
-    const remoteP=rp||{}, remoteM=rm||{};
+    const [rp,rm,rd,rc]=await Promise.all([ fetchJSON(ep("products")), fetchJSON(ep("movements")), fetchJSON(ep("devices")), fetchJSON(ep("config")) ]);
+    const remoteP=rp||{}, remoteM=rm||{}, remoteD=rd||{}, remoteCfg=rc||null;
     if(D._seed && Object.keys(remoteP).length>0){
-      D.products=remoteP; D.movements=remoteM; D._seed=false; SC.dirty={products:{},movements:{}};
+      D.products=remoteP; D.movements=remoteM; D.devices=remoteD; if(remoteCfg) D.config=remoteCfg;
+      D._seed=false; SC.dirty={products:{},movements:{},devices:{}};
       ensureSchema(); save(); saveSync(); SC.lastSync=now(); SC.lastError=""; saveSync();
       syncing=false; setSyncStatus(); App.renderAll(); if(manual) toast("Données récupérées"); return;
     }
-    const toPush={products:[],movements:[]};
-    mergeColl("products",remoteP,toPush); mergeColl("movements",remoteM,toPush);
+    // config : le plus récent gagne
+    if(remoteCfg && (remoteCfg.updatedAt||0)>(D.config.updatedAt||0)){ D.config=remoteCfg; SC.dirtyConfig=false; }
+    const toPush={products:[],movements:[],devices:[]};
+    mergeColl("products",remoteP,toPush); mergeColl("movements",remoteM,toPush); mergeColl("devices",remoteD,toPush);
     save();
     for(const id of toPush.products){ await putJSON(ep("products/"+id), D.products[id]); delete SC.dirty.products[id]; }
     for(const id of toPush.movements){ await putJSON(ep("movements/"+id), D.movements[id]); delete SC.dirty.movements[id]; }
+    for(const id of toPush.devices){ await putJSON(ep("devices/"+id), D.devices[id]); delete SC.dirty.devices[id]; }
+    if(SC.dirtyConfig || (D.config.updatedAt||0)>((remoteCfg&&remoteCfg.updatedAt)||0)){ await putJSON(ep("config"), D.config); SC.dirtyConfig=false; }
     SC.lastSync=now(); SC.lastError=""; saveSync(); syncing=false; setSyncStatus(); App.renderAll();
     if(manual) toast("Synchronisé");
   }catch(e){ syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus(); if(manual) toast("Échec : "+SC.lastError); }
@@ -958,7 +1018,124 @@ const App={
       return `<div class="adrow"><div class="ai"><b>${esc(p.name)}</b><span>${info}</span></div>
         <button class="icon-b" onclick="App.editProduct('${p.id}')">✏️</button>
         <button class="icon-b del" onclick="App.deleteProduct('${p.id}')">🗑️</button></div>`; }).join("");
+    this.renderGov();
     this.renderSync();
+    const rb=document.getElementById("resetBtn"); if(rb) rb.style.display=isAdminDevice()?"inline-flex":"none";
+  },
+
+  renderGov(){
+    const box=document.getElementById("govBox"); if(!box) return;
+    const me=esc(SC.deviceName||"(sans nom)");
+    if(!isAdminDevice()){
+      const adminDev=D.devices[D.config.adminDeviceId];
+      box.innerHTML=`<div class="synccard">
+        <div class="syncstat"><span class="sdot off"></span>Cet appareil : <b style="margin-left:4px">${me}</b></div>
+        <div class="syncsub">Rôle : utilisateur.${adminDev?(" Administrateur : "+esc(adminDev.name)+"."):" Aucun administrateur défini."}</div>
+        <button class="btn btn-ghost" style="margin-top:6px" onclick="App.becomeAdmin()">Définir cet appareil comme administrateur principal</button>
+        <button class="btn btn-ghost" style="margin-top:8px" onclick="App.renameSelf()">Renommer cet appareil</button>
+      </div>`;
+      return;
+    }
+    // appareil ADMIN
+    const devs=Object.values(D.devices).filter(d=>!d.deleted).sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));
+    const devRows=devs.map(d=>{
+      const meTag=d.deviceId===SC.deviceId?' <span class="tag" style="color:var(--in-deep);background:#e9f1de">cet appareil</span>':'';
+      const adm=d.deviceId===D.config.adminDeviceId?' <span class="tag">admin</span>':'';
+      return `<div class="adrow"><div class="ai"><b>${esc(d.name)}${meTag}${adm}</b><span>vu ${ago(d.lastSeen)} · installé ${dts(d.enrolledAt)}</span></div>
+        <button class="icon-b" onclick="App.renameDevice('${d.deviceId}')">✏️</button>
+        ${d.deviceId!==SC.deviceId?`<button class="icon-b del" onclick="App.revokeDevice('${d.deviceId}')">🗑️</button>`:""}</div>`; }).join("");
+    box.innerHTML=`<div class="synccard">
+      <div class="syncstat"><span class="sdot ok"></span>Administrateur : <b style="margin-left:4px">${me}</b></div>
+      <div class="ed-field" style="margin-top:10px"><label>Code d'installation (pour les nouveaux appareils)</label>
+        <input id="govCode" value="${attr(D.config.enrollCode||"")}" placeholder="laisser vide = pas de code"></div>
+      <button class="btn btn-dark" onclick="App.saveEnrollCode()">Enregistrer le code</button>
+      <div class="section-title" style="margin-top:18px">Appareils installés (${devs.length})</div>
+      ${devRows||'<div class="empty" style="padding:10px">Aucun appareil enregistré.</div>'}
+      <div class="section-title" style="margin-top:18px">Journal d'activité</div>
+      <div class="syncsub" style="margin-bottom:8px">Dernières saisies, avec l'auteur. Touchez « Corriger » pour annuler/ajuster une erreur.</div>
+      <div id="actFilter"></div>
+      <div id="actList"></div>
+    </div>`;
+    this.renderActivity();
+  },
+
+  renderActivity(){
+    const list=document.getElementById("actList"); if(!list) return;
+    const people=["(tous)",...Array.from(new Set(activeMovements().map(m=>m.by).filter(Boolean)))];
+    const f=this._actBy||"(tous)";
+    const fb=document.getElementById("actFilter");
+    if(fb) fb.innerHTML='<div class="seg" style="flex-wrap:wrap">'+people.map(p=>`<button class="${p===f?'on neutral':''}" style="flex:0 0 auto;padding:8px 12px" onclick="App.setActBy('${attr(p)}')">${esc(p==='(tous)'?'Tous':p)}</button>`).join("")+'</div>';
+    let mv=activeMovements().sort((a,b)=>b.ts-a.ts);
+    if(f!=="(tous)") mv=mv.filter(m=>(m.by||"")===f);
+    mv=mv.slice(0,60);
+    list.innerHTML=mv.length?mv.map(m=>{ const p=prod(m.productId);
+      return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}</b>
+        <span>${esc(describeMovement(m))} · ${m.by?("👤 "+esc(m.by)):"—"} · ${frDate(m.date)} ${hhmm(m.ts)}</span></div>
+        <button class="undo" onclick="App.cancelEntry('${m.id}',false)">Corriger</button></div>`;
+    }).join(""):'<div class="empty">Aucune saisie.</div>';
+  },
+  setActBy(p){ this._actBy=p; this.renderActivity(); },
+
+  becomeAdmin(){
+    openSheet(`<h3>Administrateur principal</h3><div class="sub">Cet appareil deviendra l'administrateur (gestion du code d'installation, des appareils et du journal). ${D.config.adminDeviceId&&D.config.adminDeviceId!==SC.deviceId?"Cela remplacera l'administrateur actuel.":""}</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._ba()">Confirmer</button></div>`,false);
+    window._ba=()=>{ D.config.adminDeviceId=SC.deviceId; markConfigDirty(); SC.role="admin"; saveSync(); registerDevice(); save();
+      closeSheet(); toast("Cet appareil est administrateur"); App.renderAdmin(); if(SC.url) syncNow(false); };
+  },
+  saveEnrollCode(){ D.config.enrollCode=(document.getElementById("govCode").value||"").trim(); markConfigDirty(); toast("Code d'installation enregistré"); if(SC.url) syncNow(false); },
+  renameSelf(){ this._renameTarget=SC.deviceId; this._renameSheet(SC.deviceName||""); },
+  renameDevice(id){ this._renameTarget=id; this._renameSheet((D.devices[id]||{}).name||""); },
+  _renameSheet(cur){
+    openSheet(`<h3>Nom de l'appareil</h3><div class="sub">Identifie la personne qui l'utilise.</div>
+      <div class="ed-field"><label>Nom</label><input id="rnN" value="${attr(cur)}" autofocus></div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-dark" onclick="window._rn()">Enregistrer</button></div>`,false);
+    window._rn=()=>{ const nm=document.getElementById("rnN").value.trim(); if(!nm){ toast("Nom requis"); return; }
+      const id=App._renameTarget; const d=D.devices[id];
+      if(d){ d.name=nm; d.updatedAt=now(); SC.dirty.devices[id]=true; saveSync(); }
+      if(id===SC.deviceId){ SC.deviceName=nm; saveSync(); }
+      save(); closeSheet(); toast("Nom enregistré"); App.renderAdmin(); if(SC.url) syncNow(false); };
+  },
+  revokeDevice(id){ const d=D.devices[id]; if(!d) return;
+    openSheet(`<h3>Révoquer cet appareil ?</h3><div class="sub">« ${esc(d.name)} » sera retiré de la liste. S'il rouvre l'app, il devra ré-entrer le code d'installation.</div>
+      <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
+      <button class="btn btn-danger" onclick="window._rv()">Révoquer</button></div>`,false);
+    window._rv=()=>{ d.deleted=true; d.updatedAt=now(); SC.dirty.devices[id]=true; saveSync(); save(); closeSheet(); toast("Appareil révoqué"); App.renderAdmin(); if(SC.url) syncNow(false); };
+  },
+
+  // ---------- enrôlement (porte d'installation) ----------
+  checkEnrollment(){
+    const gate=document.getElementById("enrollGate");
+    if(!SC.enrolled){ this._showGate(false); }
+    else if(!SC.deviceName){ this._showGate(true); }
+    else { gate.style.display="none"; registerDevice(); bumpLastSeen(); }
+  },
+  _showGate(nameOnly){
+    const gate=document.getElementById("enrollGate");
+    document.getElementById("enrTitle").textContent=nameOnly?"Qui utilise cet appareil ?":"Installation";
+    document.getElementById("enrLead").textContent=nameOnly?"Indiquez votre nom pour identifier vos saisies.":"Application réservée. Entrez le code d'installation fourni par l'administrateur et votre nom.";
+    document.getElementById("enrCodeField").style.display=nameOnly?"none":"block";
+    document.getElementById("enrMsg").textContent="";
+    gate.style.display="block"; gate._nameOnly=nameOnly;
+  },
+  async doEnroll(){
+    const gate=document.getElementById("enrollGate"), nameOnly=gate._nameOnly;
+    const name=document.getElementById("enrName").value.trim();
+    const msg=document.getElementById("enrMsg");
+    if(!name){ msg.textContent="Indiquez votre nom."; return; }
+    if(!nameOnly){
+      const code=(document.getElementById("enrCode").value||"").trim();
+      msg.textContent="Vérification…";
+      try{ const rc=await fetchJSON(ep("config")); const cfg=rc||{};
+        if(cfg.enrollCode && cfg.enrollCode!==code){ msg.textContent="Code d'installation incorrect."; return; }
+        if(cfg && cfg.updatedAt) D.config=cfg;
+      }catch(e){ msg.textContent="Connexion internet requise pour l'installation."; return; }
+    }
+    SC.enrolled=true; SC.deviceName=name; saveSync();
+    registerDevice(); save();
+    gate.style.display="none"; toast("Bienvenue, "+name);
+    App.go("in"); if(SC.url) syncNow(true);
   },
   renderSync(){
     const box=document.getElementById("syncBox"); if(!box) return; let dot="off",label;
@@ -970,13 +1147,13 @@ const App={
     else { dot="ok"; label="Prête"; }
     const pc=pendingCount();
     box.innerHTML=`<div class="synccard"><div class="syncstat"><span class="sdot ${dot}"></span>${label}</div>
-      <div class="syncsub">${pc>0?(pc+" en attente d'envoi. "):""}Les 3 téléphones doivent utiliser la même adresse.</div>
-      <input class="syncin" id="syncUrl" placeholder="https://...firebasedatabase.app" value="${attr(SC.url)}">
-      <div class="btn-row" style="margin-top:0"><button class="btn btn-ghost" onclick="App.saveSyncUrl()">Enregistrer l'adresse</button>
-        <button class="btn btn-dark" onclick="App.syncManual()">🔄 Synchroniser</button></div>
+      <div class="syncsub">${pc>0?(pc+" en attente d'envoi. "):""}Appareil : <b>${esc(SC.deviceName||"(sans nom)")}</b>${isAdminDevice()?" · administrateur":""}.</div>
+      <div class="btn-row" style="margin-top:0"><button class="btn btn-dark" onclick="App.syncManual()">🔄 Synchroniser</button></div>
       <div class="toggle">Synchronisation automatique<div class="sw ${SC.auto?'on':''}" onclick="App.toggleAuto()"><i></i></div></div>
+      ${isAdminDevice()?`<input class="syncin" id="syncUrl" style="margin-top:10px" value="${attr(SC.url)}">
+      <button class="btn btn-ghost" onclick="App.saveSyncUrl()">Enregistrer l'adresse</button>
       <button class="btn btn-danger" style="margin-top:10px" onclick="App.makeAuthoritative()">⚠️ Remplacer la base en ligne par cet appareil</button>
-      <div class="syncsub" style="margin-top:8px">En cas de doublons : vide la base en ligne et y renvoie uniquement les données de cet appareil.</div></div>`;
+      <div class="syncsub" style="margin-top:8px">En cas de doublons : vide la base et y renvoie uniquement cet appareil.</div>`:""}</div>`;
   },
   saveSyncUrl(){ SC.url=normUrl(document.getElementById("syncUrl").value); SC.lastError=""; saveSync(); toast(SC.url?"Adresse enregistrée":"Adresse effacée"); this.renderSync(); if(SC.url) syncNow(true); },
   syncManual(){ const el=document.getElementById("syncUrl"); if(el){ const v=normUrl(el.value); if(v!==SC.url){ SC.url=v; saveSync(); } } syncNow(true); },
@@ -987,8 +1164,8 @@ const App={
       <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
       <button class="btn btn-danger" onclick="window._maO()">Oui, remplacer</button></div>`,false);
     window._maO=async ()=>{ closeSheet(); if(syncing) return; syncing=true; D._seed=false; SC.lastError=""; setSyncStatus();
-      try{ await putJSON(normUrl(SC.url)+"/.json",{ products:D.products, movements:D.movements });
-        SC.dirty={products:{},movements:{}}; SC.lastSync=now(); saveSync(); save(); syncing=false; setSyncStatus(); App.renderAll(); toast("Base en ligne remplacée");
+      try{ await putJSON(normUrl(SC.url)+"/.json",{ products:D.products, movements:D.movements, devices:D.devices, config:D.config });
+        SC.dirty={products:{},movements:{},devices:{}}; SC.dirtyConfig=false; SC.lastSync=now(); saveSync(); save(); syncing=false; setSyncStatus(); App.renderAll(); toast("Base en ligne remplacée");
       }catch(e){ syncing=false; SC.lastError=String(e&&e.message||e); saveSync(); setSyncStatus(); toast("Échec : "+SC.lastError); } };
   },
 
@@ -1053,7 +1230,7 @@ const App={
     openSheet(`<h3>Réinitialiser cet appareil ?</h3><div class="sub">Efface les données locales et restaure les catalogues par défaut. La base en ligne n'est pas effacée : une synchro la re-téléchargera.</div>
       <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Annuler</button>
       <button class="btn btn-danger" onclick="window._ro()">Tout effacer</button></div>`,false);
-    window._ro=()=>{ D=freshData(); SC.dirty={products:{},movements:{}}; ensureSchema(); save(); saveSync(); closeSheet(); toast("Réinitialisé"); App.renderAll(); };
+    window._ro=()=>{ D=freshData(); SC.dirty={products:{},movements:{},devices:{}}; ensureSchema(); save(); saveSync(); closeSheet(); toast("Réinitialisé"); App.renderAll(); };
   }
 };
 
@@ -1069,7 +1246,8 @@ document.getElementById("repDate").value=todayStr();
 document.getElementById("workDate").addEventListener("change",()=>{ if(curTab==="in") App.renderRec(); else if(curTab==="out") App.renderPro(); });
 window.App=App;
 App.go("in");
-if(SC.url) setTimeout(()=>syncNow(false),600);
+App.checkEnrollment();
+if(SC.url) setTimeout(()=>{ syncNow(false).then(()=>App.checkEnrollment()); },600);
 })();
 </script>
 </body>
