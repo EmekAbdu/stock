@@ -275,6 +275,7 @@
     <div class="pools" id="proPools"></div>
     <p class="lead" id="leadOut"></p>
     <div class="vehsel" id="proDriverSeg" style="display:none"></div>
+    <div class="seg" id="proModeSeg" style="display:none"><button id="pmSupply" class="on out" onclick="App.setProMode('supply')">➕ Approvisionner</button><button id="pmSell" onclick="App.setProMode('sell')">🛒 Vente du jour</button></div>
     <div class="section-title" id="proGridTitle">Produits — produits finis</div>
     <div class="grid" id="gridOut"></div>
     <div class="section-title">Saisies à vérifier</div>
@@ -429,6 +430,7 @@ let D=null, SC=null;
 let unlocked=false, curTab="in";
 let recDir="in", proDir="in", invStock="matiere", repStock="matiere", admStock="matiere";
 let proOutDriver="ayhan";
+let proMode="supply";
 const DRIVERS={
   ayhan:"Ayhan",
   gokhan:"Gökhan",
@@ -468,7 +470,8 @@ function describeMovement(m){
   }
   if(m.kind==="in") return "Production +"+Math.abs(m.n)+" u";
   if(m.kind==="load") return "Chargé "+Math.abs(m.n)+" u → "+(DRIVERS[m.driver]||"?");
-  if(m.kind==="vin") return "Stock véhicule +"+Math.abs(m.n)+" u → "+(DRIVERS[m.driver]||"?");
+  if(m.kind==="vin") return "Stock initial +"+Math.abs(m.n)+" u → "+(DRIVERS[m.driver]||"?");
+  if(m.kind==="vout") return "Vendu "+Math.abs(m.n)+" u · "+(DRIVERS[m.driver]||"?");
   if(m.kind==="out") return "Sortie fini −"+Math.abs(m.n)+" u";
   return "Correction fini "+(m.n>=0?"+":"−")+Math.abs(m.n)+" u";
 }
@@ -604,11 +607,13 @@ function historyRows(stock,kind,pid){
   }).join("");
 }
 function historyRowsVeh(driver,pid){
-  const list=activeMovements().filter(m=>m.stock==="fini"&&(m.kind==="load"||m.kind==="vin")&&m.driver===driver&&m.productId===pid).sort((a,b)=>b.ts-a.ts).slice(0,6);
-  if(!list.length) return `<div class="empty" style="padding:14px">Aucun chargement pour ce produit.</div>`;
+  const list=activeMovements().filter(m=>m.stock==="fini"&&(m.kind==="load"||m.kind==="vin"||m.kind==="vout")&&m.driver===driver&&m.productId===pid).sort((a,b)=>b.ts-a.ts).slice(0,6);
+  if(!list.length) return `<div class="empty" style="padding:14px">Aucune opération pour ce produit.</div>`;
   return list.map(r=>{ const when=(r.date===todayStr()?"Aujourd'hui":frDate(r.date))+" · "+hhmm(r.ts);
-    return `<div class="logrow"><div class="li"><b>${Math.abs(r.n)} unité(s)</b><span>${r.kind==="vin"?"déjà présent":"chargé depuis l'entrepôt"} · ${when}</span></div>
-      <div class="amt out">+ ${Math.abs(r.n)} u</div><button class="undo" onclick="App.cancelEntry('${r.id}',true)">Annuler</button></div>`;
+    const lab=r.kind==="vout"?"vendu":(r.kind==="vin"?"stock initial":"chargé depuis l'entrepôt");
+    const sign=r.kind==="vout"?"−":"+", cls=r.kind==="vout"?"in":"out";
+    return `<div class="logrow"><div class="li"><b>${Math.abs(r.n)} unité(s)</b><span>${lab} · ${when}</span></div>
+      <div class="amt ${cls}">${sign} ${Math.abs(r.n)} u</div><button class="undo" onclick="App.cancelEntry('${r.id}',true)">Annuler</button></div>`;
   }).join("");
 }
 
@@ -713,6 +718,7 @@ const App={
     if(tab==="out") document.getElementById("proDriverSeg").style.display=(dir==="out"?"flex":"none");
     if(tab==="in") this.renderRec(); else this.renderPro(); },
   setProDriver(d){ proOutDriver=d; this.renderPro(); },
+  setProMode(m){ proMode=m; this.renderPro(); },
   setInvStock(s){ invStock=s; document.getElementById("segInvM").className=(s==="matiere"?"on neutral":""); document.getElementById("segInvF").className=(s==="fini"?"on neutral":""); this.renderHeader(); this.renderInv(); },
   setRepStock(s){ repStock=s; document.getElementById("segRepM").className=(s==="matiere"?"on neutral":""); document.getElementById("segRepF").className=(s==="fini"?"on neutral":""); this.renderHeader(); this.renderRep(); },
   setAdmStock(s){ admStock=s; document.getElementById("segAdmM").className=(s==="matiere"?"on neutral":""); document.getElementById("segAdmF").className=(s==="fini"?"on neutral":""); this.renderAdmin(); },
@@ -742,6 +748,7 @@ const App={
     if(p.stock==="matiere"){ if(recDir==="in") this.sheetMatiereIn(id); else this.sheetMatiereOut(id); }
     else { this.sheetFiniIn(id); } },
   pickVehicle(driver,id){ this.sheetVehicleLoad(driver,id); },
+  pickSale(driver,id){ this.sheetVehicleSale(driver,id); },
 
   // ---------- PRODUCTION (produits finis + véhicules) ----------
   renderPro(){
@@ -756,6 +763,7 @@ const App={
 
     if(proDir==="in"){
       sel.style.display="none";
+      document.getElementById("proModeSeg").style.display="none";
       document.getElementById("proGridTitle").textContent="Produits — ajout à l'entrepôt";
       document.getElementById("leadOut").textContent="Ajout de produits finis à l'entrepôt (fabrication / emballage).";
       const tile=p=>{ const s=wh[p.id]||0; let cls="ok",txt=numFR(s,0)+" u"; if(s<=0){cls="empty";txt="Rupture";} else if(s<5){cls="low";}
@@ -766,11 +774,17 @@ const App={
       if(!DRIVERS[proOutDriver]) proOutDriver=Object.keys(DRIVERS)[0];
       sel.style.display="flex";
       sel.innerHTML=Object.keys(DRIVERS).map(d=>`<button class="${d===proOutDriver?'on':''}" onclick="App.setProDriver('${d}')">${esc(DRIVERS[d])}</button>`).join("");
-      const dest=veh[proOutDriver];
-      document.getElementById("proGridTitle").textContent="Sortie vers — "+DRIVERS[proOutDriver];
-      document.getElementById("leadOut").textContent="Touchez un produit pour sortir du stock vers "+DRIVERS[proOutDriver]+" (la marchandise quitte l'entrepôt).";
+      document.getElementById("proModeSeg").style.display="flex";
+      document.getElementById("pmSupply").className=(proMode==="supply"?"on out":"");
+      document.getElementById("pmSell").className=(proMode==="sell"?"on out":"");
+      const dest=veh[proOutDriver], selling=proMode==="sell";
+      document.getElementById("proGridTitle").textContent=(selling?"Vente du jour — ":"Sortie vers — ")+DRIVERS[proOutDriver];
+      document.getElementById("leadOut").textContent=selling
+        ?("Touchez un produit vendu : le stock de "+DRIVERS[proOutDriver]+" diminue (l'entrepôt n'est pas touché).")
+        :("Touchez un produit pour sortir du stock vers "+DRIVERS[proOutDriver]+" (la marchandise quitte l'entrepôt).");
       const tile=p=>{ const s=dest[p.id]||0; let cls="ok",txt=numFR(s,0)+" u"; if(s<=0){cls="empty";txt="0 u";}
-        return `<button class="pbtn" onclick="App.pickVehicle('${proOutDriver}','${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
+        const act=selling?"pickSale":"pickVehicle";
+        return `<button class="pbtn" onclick="App.${act}('${proOutDriver}','${p.id}')"><span class="pn">${esc(p.name)}</span><span class="ps ${cls}">${txt}</span></button>`; };
       document.getElementById("gridOut").innerHTML=fp.map(tile).join("");
       this.renderLogs("fini","out","logOut");
     }
@@ -778,7 +792,7 @@ const App={
 
   renderLogs(stock,dir,elId){
     const since=(D.settings.validUntil[stock+"_"+dir])||0;
-    const kinds=stock==="matiere"?[dir==="in"?"in":"out"]:(dir==="in"?["in"]:["load","vin"]);
+    const kinds=stock==="matiere"?[dir==="in"?"in":"out"]:(dir==="in"?["in"]:["load","vin","vout"]);
     const list=activeMovements().filter(m=>m.stock===stock&&kinds.indexOf(m.kind)>=0&&m.ts>since).sort((a,b)=>b.ts-a.ts).slice(0,50);
     const today=todayStr(), tag=iso=>iso===today?"":`<span class="tag">${frDate(iso)}</span>`;
     const validBtn=`<button class="btn btn-dark" style="margin-bottom:10px" onclick="App.validateLog('${stock}','${dir}')">✓ Valider la liste</button>`;
@@ -786,7 +800,7 @@ const App={
       let det,amt,cls;
       if(stock==="matiere"){ det=dir==="in"?`${r.qty} × ${kg(r.pkgSize)} kg`:`${r.units} × ${kg(r.kgPerUnit)} kg`; amt=(dir==="in"?"+ ":"− ")+kg(Math.abs(r.kg))+" kg"; cls=dir==="in"?"in":"out"; }
       else if(dir==="in"){ det=`${Math.abs(r.n)} unité(s)`; amt="+ "+Math.abs(r.n)+" u"; cls="in"; }
-      else { det=`🚚 ${DRIVERS[r.driver]||"?"} · ${r.kind==="vin"?"déjà présent":"chargé"}`; amt="− "+Math.abs(r.n)+" u"; cls="out"; }
+      else { const lab=r.kind==="vout"?"vendu":(r.kind==="vin"?"stock initial":"chargé"); det=`${esc(DRIVERS[r.driver]||"?")} · ${lab}`; amt="− "+Math.abs(r.n)+" u"; cls="out"; }
       return `<div class="logrow"><div class="li"><b>${esc(p?p.name:"(supprimé)")}${tag(r.date)}</b><span>${det} · ${hhmm(r.ts)}</span></div>
         <div class="amt ${cls}">${amt}</div><button class="undo" onclick="App.cancelEntry('${r.id}',false)">Annuler</button></div>`;
     }).join("")):`<div class="empty">Aucune saisie à vérifier.</div>`;
@@ -807,9 +821,10 @@ const App={
     const big=()=>fini?(numFR(n,0)+" u"):(kg(r3(n*per))+" kg");
     const txt=()=>{ if(n===total) return "Saisie entièrement annulée";
       return fini?("Saisie ramenée à "+(total-n)+" unité(s)"):("Saisie ramenée à "+(total-n)+" × "+kg(per)+" kg"); };
-    const sub=()=>{ if(fini && (m.kind==="load"||m.kind==="vin")) return `${esc(p?p.name:"")} · 🚚 ${DRIVERS[m.driver]||"?"} · ${total} unité(s)`;
+    const sub=()=>{ if(fini && (m.kind==="load"||m.kind==="vin"||m.kind==="vout")) return `${esc(p?p.name:"")} · ${esc(DRIVERS[m.driver]||"?")} · ${total} unité(s)`;
       return fini?`${esc(p?p.name:"")} · ${total} unité(s)`:`${esc(p?p.name:"")} · ${total} × ${kg(per)} kg`; };
     const reopen=()=>{ if(m.stock==="matiere"){ if(m.kind==="in") App.sheetMatiereIn(m.productId); else App.sheetMatiereOut(m.productId); }
+      else if(m.kind==="vout"){ App.sheetVehicleSale(m.driver,m.productId); }
       else if(m.kind==="load"||m.kind==="vin"){ App.sheetVehicleLoad(m.driver,m.productId); } else App.sheetFiniIn(m.productId); };
     const draw=()=>{ openSheet(`<h3>Annuler une saisie</h3><div class="sub">${sub()}</div>
         <div class="field" style="margin-top:0"><label>Quantité à annuler (${word})</label>
@@ -954,6 +969,32 @@ const App={
       const date=document.getElementById("workDate").value||todayStr();
       pushMovement({stock:"fini",kind:"vin",productId:id,driver,n:st.units,date});
       closeSheet(); toast("Stock initial : "+numFR(st.units,0)+" u → "+DRIVERS[driver]); App.renderAll(); };
+    render();
+  },
+
+  // ========== Vente du jour (sortie du véhicule) ==========
+  sheetVehicleSale(driver,id){
+    const p=prod(id); const st={units:1};
+    const render=()=>{ const vc=vehStock(driver,id), after=vc-st.units;
+      openSheet(`<h3>${esc(p.name)}</h3><div class="sub">🛒 ${esc(DRIVERS[driver])} · en stock ${numFR(vc,0)} u</div>
+        <div class="field" style="margin-top:0"><label>Quantité vendue (unités)</label>
+          <div class="stepper"><button class="step-b" onclick="window._su(-1)">−</button>
+          <input class="num tnum" id="su" inputmode="numeric" value="${st.units}" oninput="window._sui(this.value)">
+          <button class="step-b" onclick="window._su(1)">＋</button></div></div>
+        <div class="calc">Vente<div class="big out tnum">− ${numFR(st.units,0)} u</div>
+          <div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">Reste → ${numFR(after,0)} u ${after<0?'⚠️ stock dépassé':''} · entrepôt inchangé</div></div>
+        <div class="btn-row"><button class="btn btn-ghost" onclick="closeSheet()">Fermer</button>
+          <button class="btn btn-out" onclick="window._sell()">🛒 Enregistrer la vente</button></div>
+        <div class="section-title" style="margin-top:18px">Dernières opérations</div>
+        <div id="histBox">${historyRowsVeh(driver,id)}</div>`, true); };
+    const upd=()=>{ const vc=vehStock(driver,id), after=vc-st.units; const c=ovSheet.querySelector(".calc");
+      if(c) c.innerHTML=`Vente<div class="big out tnum">− ${numFR(st.units,0)} u</div><div style="font-size:12.5px;margin-top:4px;color:${after<0?'var(--warn)':'var(--muted)'}">Reste → ${numFR(after,0)} u ${after<0?'⚠️ stock dépassé':''} · entrepôt inchangé</div>`; };
+    window._su=d=>{ st.units=Math.max(1,(st.units||0)+d); render(); };
+    window._sui=v=>{ st.units=Math.max(0,Math.floor(parseNum(v)||0)); upd(); };
+    window._sell=()=>{ if(!st.units||st.units<=0){ toast("Quantité invalide"); return; }
+      const date=document.getElementById("workDate").value||todayStr();
+      pushMovement({stock:"fini",kind:"vout",productId:id,driver,n:st.units,date});
+      closeSheet(); toast("Vente : −"+numFR(st.units,0)+" u · "+DRIVERS[driver]); App.renderAll(); };
     render();
   },
   renderInv(){
